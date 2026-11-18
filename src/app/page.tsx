@@ -2,34 +2,31 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { supabase, type Profile } from "@/lib/supabase";
 import AuthForm from "@/components/AuthForm";
+import Onboarding from "@/components/Onboarding";
+import Quiz from "@/components/Quiz";
 
-interface BasicProfile {
-  id: string;
-  full_name: string;
-  age: number;
-  gender: string;
-  looking_for: string;
-  city: string;
-  dpdp_consent_at: string;
+function isQuizComplete(profile: Profile | null): boolean {
+  if (!profile) return false;
+  return (
+    profile.q1 !== null &&
+    profile.q2 !== null &&
+    profile.q3 !== null &&
+    profile.q4 !== null &&
+    profile.q5 !== null
+  );
 }
 
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<BasicProfile | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Minimal Phase 1 fields to test saving 1 row into `profiles`
-  const [fullName, setFullName] = useState("");
-  const [age, setAge] = useState(24);
-  const [gender, setGender] = useState("M");
-  const [lookingFor, setLookingFor] = useState("F");
-  const [city, setCity] = useState("Bengaluru");
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [editingStep, setEditingStep] = useState<"onboarding" | "quiz" | null>(
+    null
+  );
 
   useEffect(() => {
-    // 1. Check current session from browser localStorage
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -37,7 +34,6 @@ export default function HomePage() {
       else setLoading(false);
     });
 
-    // 2. Listen for login / logout events
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -46,6 +42,7 @@ export default function HomePage() {
       if (currentUser) loadProfile(currentUser.id);
       else {
         setProfile(null);
+        setEditingStep(null);
         setLoading(false);
       }
     });
@@ -57,48 +54,12 @@ export default function HomePage() {
     setLoading(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, age, gender, looking_for, city, dpdp_consent_at")
+      .select("*")
       .eq("id", userId)
       .maybeSingle();
 
-    if (data) {
-      setProfile(data);
-      setFullName(data.full_name);
-      setAge(data.age);
-      setGender(data.gender);
-      setLookingFor(data.looking_for);
-      setCity(data.city);
-    }
+    setProfile((data as Profile) ?? null);
     setLoading(false);
-  }
-
-  async function handleSaveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!user) return;
-    setStatusMsg(null);
-
-    const row = {
-      id: user.id,
-      full_name: fullName,
-      age: Number(age),
-      gender,
-      looking_for: lookingFor,
-      city,
-      dpdp_consent_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .upsert(row)
-      .select("id, full_name, age, gender, looking_for, city, dpdp_consent_at")
-      .single();
-
-    if (error) {
-      setStatusMsg(`Error: ${error.message}`);
-    } else {
-      setProfile(data);
-      setStatusMsg("Profile row saved to Supabase!");
-    }
   }
 
   async function handleSignOut() {
@@ -109,134 +70,113 @@ export default function HomePage() {
     return <main className="p-8 text-center text-sm">Loading session...</main>;
   }
 
+  const needsOnboarding = !profile;
+  const needsQuiz = profile && !isQuizComplete(profile);
+
   return (
-    <main className="mx-auto max-w-xl p-6">
+    <main className="mx-auto max-w-2xl p-6">
       <header className="mb-8 flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
           <h1 className="text-xl font-bold text-white">pHavelength</h1>
           <p className="text-xs text-slate-400">
-            Phase 1: Supabase Auth + One Saved Profile Row
+            Simulated eLitmus verification (prototype)
           </p>
         </div>
         {user && (
-          <button
-            onClick={handleSignOut}
-            className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            Sign Out
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-xs text-slate-400 sm:inline">
+              {user.email}
+            </span>
+            <button
+              onClick={handleSignOut}
+              className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              Sign Out
+            </button>
+          </div>
         )}
       </header>
 
       {!user ? (
         <AuthForm />
+      ) : needsOnboarding || editingStep === "onboarding" ? (
+        <Onboarding
+          userId={user.id}
+          existingProfile={profile}
+          onComplete={(saved) => {
+            setProfile(saved);
+            setEditingStep(null);
+          }}
+        />
+      ) : needsQuiz || editingStep === "quiz" ? (
+        <Quiz
+          profile={profile}
+          onComplete={(updated) => {
+            setProfile(updated);
+            setEditingStep(null);
+          }}
+        />
       ) : (
-        <div className="space-y-6">
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-xs text-slate-300">
+        <div className="space-y-4 rounded-lg border border-emerald-800/60 bg-emerald-950/20 p-6">
+          <div className="flex items-center gap-4">
+            {profile.avatar_url && (
+              <img
+                src={profile.avatar_url}
+                alt="Your avatar"
+                className="h-14 w-14 rounded-xl border border-slate-700"
+              />
+            )}
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                {profile.full_name}, {profile.age}
+              </h2>
+              <p className="text-xs text-slate-300">
+                {profile.role_title || "Grad"} • {profile.city} • Batch{" "}
+                {profile.batch}
+              </p>
+              <p className="mt-0.5 text-[11px] text-amber-300/90">
+                Simulated eLitmus verification (prototype)
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded border border-slate-800 bg-slate-900 p-4 text-xs text-slate-300 space-y-1">
             <p>
-              <strong>Logged in as:</strong> {user.email}
+              <strong>DPDP Consent Recorded At:</strong>{" "}
+              {new Date(profile.dpdp_consent_at).toLocaleString()}
             </p>
-            <p className="mt-1 text-slate-400">
-              <strong>Auth User ID:</strong> {user.id}
+            <p>
+              <strong>Privacy Shield:</strong> Hide same company (
+              {profile.company_domain || "none"}):{" "}
+              {profile.hide_same_company ? "ON" : "OFF"} | Hide same college (
+              {profile.college_name || "none"}):{" "}
+              {profile.hide_same_college ? "ON" : "OFF"}
+            </p>
+            <p>
+              <strong>Quiz Vector (q1–q5):</strong> [{profile.q1}, {profile.q2},{" "}
+              {profile.q3}, {profile.q4}, {profile.q5}]
             </p>
           </div>
 
-          <form
-            onSubmit={handleSaveProfile}
-            className="space-y-3 rounded-lg border border-slate-800 bg-slate-900 p-5"
-          >
-            <h2 className="text-sm font-semibold text-white">
-              Save Your Profile Row (`profiles` table)
-            </h2>
-
-            <div>
-              <label className="block text-xs text-slate-300">Full Name</label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs text-slate-300">
-                  Age (18+)
-                </label>
-                <input
-                  type="number"
-                  min={18}
-                  required
-                  value={age}
-                  onChange={(e) => setAge(Number(e.target.value))}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-300">Gender</label>
-                <select
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
-                >
-                  <option value="M">M</option>
-                  <option value="F">F</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-300">
-                  Looking For
-                </label>
-                <select
-                  value={lookingFor}
-                  onChange={(e) => setLookingFor(e.target.value)}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
-                >
-                  <option value="F">F</option>
-                  <option value="M">M</option>
-                  <option value="All">All</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-slate-300">City</label>
-              <input
-                type="text"
-                required
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
-              />
-            </div>
-
-            {statusMsg && (
-              <p className="text-xs text-emerald-400">{statusMsg}</p>
-            )}
-
+          <div className="flex flex-wrap gap-3 pt-1">
             <button
-              type="submit"
-              className="w-full rounded bg-violet-600 py-2 text-sm font-medium text-white hover:bg-violet-500"
+              onClick={() => setEditingStep("onboarding")}
+              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
             >
-              Save Profile Row
+              Edit Profile &amp; Shield
             </button>
-          </form>
+            <button
+              onClick={() => setEditingStep("quiz")}
+              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+            >
+              Retake Compatibility Quiz
+            </button>
+          </div>
 
-          {profile && (
-            <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 p-4 text-xs">
-              <p className="font-semibold text-emerald-300">
-                Saved Row in `profiles`:
-              </p>
-              <pre className="mt-2 overflow-x-auto text-slate-300">
-                {JSON.stringify(profile, null, 2)}
-              </pre>
-            </div>
-          )}
+          <p className="text-xs text-emerald-300">
+            Phase 2 complete! Ready for Phase 3 (Seed users, Privacy Shield
+            filtering, and Today&apos;s 3 Matches).
+          </p>
         </div>
       )}
     </main>
