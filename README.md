@@ -192,4 +192,3 @@ Shared password for all seeded accounts: `elitmus2026`
 ## 8. Disclosures
 
 - **Libraries & services used:** Next.js, React, TypeScript, Tailwind CSS, `@supabase/supabase-js`, Supabase (Auth + PostgreSQL), Vercel.
-- **AI usage disclosure:** AI assistance was used for planning, architecture review, and code generation, as permitted by the assignment guidelines.
