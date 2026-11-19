@@ -6,10 +6,7 @@ import {
   getRelationshipGoalLabel,
   type Profile,
 } from "@/lib/supabase";
-import {
-  getOrCreateTodaysMatches,
-  type MatchWithProfile,
-} from "@/lib/matching";
+import type { MatchWithProfile } from "@/lib/matching";
 import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
 import PaywallModal from "@/components/PaywallModal";
 import WavePair from "@/components/WavePair";
@@ -46,12 +43,30 @@ export default function Matches({
       setLoading(true);
       setError(null);
       try {
-        const result = await getOrCreateTodaysMatches(profile);
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error("No active session found. Sign in again.");
+        }
+
+        const res = await fetch("/api/matches", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+        const result = await res.json();
+        if (!res.ok) {
+          throw new Error(result.error || "Failed to load matches.");
+        }
         if (!active) return;
 
+        const todays = result.todaysMatches as MatchWithProfile[];
+        const earlier = result.earlierMatches as MatchWithProfile[];
         const allMatchIds = [
-          ...result.todaysMatches.map((m) => m.matchId),
-          ...result.earlierMatches.map((m) => m.matchId),
+          ...todays.map((m) => m.matchId),
+          ...earlier.map((m) => m.matchId),
         ];
 
         const statusMap: Record<string, UnblurStatus> = {};
@@ -68,8 +83,8 @@ export default function Matches({
         }
 
         if (!active) return;
-        setTodaysMatches(result.todaysMatches);
-        setEarlierMatches(result.earlierMatches);
+        setTodaysMatches(todays);
+        setEarlierMatches(earlier);
         setUnblurByMatch(statusMap);
         setHiddenCount(result.hiddenByShieldCount);
         setHasMore(result.hasMoreCandidates);

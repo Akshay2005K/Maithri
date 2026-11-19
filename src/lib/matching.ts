@@ -1,20 +1,21 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  supabase,
   RELATIONSHIP_GOALS,
   type Profile,
   type RelationshipGoal,
+  type SafePartnerProfile,
 } from "./supabase";
-
-const GOAL_ORDER: Record<RelationshipGoal, number> = Object.fromEntries(
-  RELATIONSHIP_GOALS.map((g) => [g.key, g.order])
-) as Record<RelationshipGoal, number>;
 
 export interface MatchWithProfile {
   matchId: string;
   compatibilityScore: number;
   matchDate: string;
-  partner: Profile;
+  partner: SafePartnerProfile;
 }
+
+const GOAL_ORDER: Record<RelationshipGoal, number> = Object.fromEntries(
+  RELATIONSHIP_GOALS.map((g) => [g.key, g.order])
+) as Record<RelationshipGoal, number>;
 
 const NEARBY_CITIES: Record<string, string[]> = {
   Bengaluru: ["Bengaluru", "Hyderabad", "Chennai"],
@@ -24,6 +25,22 @@ const NEARBY_CITIES: Record<string, string[]> = {
   Mumbai: ["Mumbai", "Pune", "Bengaluru"],
   NCR: ["NCR", "Bengaluru", "Pune"],
 };
+
+function toSafePartnerProfile(p: Profile): SafePartnerProfile {
+  return {
+    id: p.id,
+    full_name: p.full_name,
+    age: p.age,
+    gender: p.gender,
+    city: p.city,
+    role_title: p.role_title,
+    batch: p.batch,
+    bio_prompt: p.bio_prompt,
+    avatar_url: p.avatar_url,
+    relationship_goal: p.relationship_goal,
+    prompts: p.prompts,
+  };
+}
 
 // 100 minus the average absolute difference across q1..q5, scaled from [0..4] to [0..100].
 export function computeCompatibilityScore(a: Profile, b: Profile): number {
@@ -38,7 +55,12 @@ export function computeCompatibilityScore(a: Profile, b: Profile): number {
   return Math.round(100 - (avgDiff / 4) * 100);
 }
 
-export async function getOrCreateTodaysMatches(me: Profile): Promise<{
+// Runs server-side via adminClient so clients cannot bypass the 3/day cap,
+// Privacy Shield, blocks, or read other users' quiz answers and company domains.
+export async function getOrCreateTodaysMatchesForUser(
+  me: Profile,
+  adminClient: SupabaseClient
+): Promise<{
   todaysMatches: MatchWithProfile[];
   earlierMatches: MatchWithProfile[];
   hiddenByShieldCount: number;
@@ -46,21 +68,25 @@ export async function getOrCreateTodaysMatches(me: Profile): Promise<{
 }> {
   const today = new Date().toISOString().slice(0, 10);
 
-  // Load my existing matches, my reports/blocks, and candidate profiles
-  const [{ data: existingMatches }, { data: myBlocks }, { data: allProfiles }] =
+  const [{ data: existingMatches }, { data: blocks }, { data: allProfiles }] =
     await Promise.all([
-      supabase
+      adminClient
         .from("matches")
         .select("*")
         .or(`user_a.eq.${me.id},user_b.eq.${me.id}`),
-      supabase
+      adminClient
         .from("reports_blocks")
-        .select("reported_id")
-        .eq("reporter_id", me.id),
-      supabase.from("profiles").select("*"),
+        .select("reporter_id, reported_id")
+        .or(`reporter_id.eq.${me.id},reported_id.eq.${me.id}`),
+      adminClient.from("profiles").select("*"),
     ]);
 
-  const blockedIds = new Set((myBlocks ?? []).map((b) => b.reported_id));
+  // Bidirectional block check: anyone I blocked OR who blocked me
+  const blockedIds = new Set(
+    (blocks ?? []).map((b) =>
+      b.reporter_id === me.id ? b.reported_id : b.reporter_id
+    )
+  );
   const existingPartnerIds = new Set(
     (existingMatches ?? []).map((m) =>
       m.user_a === me.id ? m.user_b : m.user_a
@@ -138,7 +164,7 @@ export async function getOrCreateTodaysMatches(me: Profile): Promise<{
   const toInsert = eligible.slice(0, slotsNeeded);
 
   if (toInsert.length > 0) {
-    const { data: inserted } = await supabase
+    const { data: inserted } = await adminClient
       .from("matches")
       .insert(
         toInsert.map((item) => ({
@@ -162,7 +188,7 @@ export async function getOrCreateTodaysMatches(me: Profile): Promise<{
           matchId: m.id,
           compatibilityScore: m.compatibility_score,
           matchDate: m.match_date,
-          partner,
+          partner: toSafePartnerProfile(partner),
         };
       })
       .filter((item): item is MatchWithProfile => item !== null)

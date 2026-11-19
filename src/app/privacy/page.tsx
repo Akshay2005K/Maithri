@@ -98,11 +98,11 @@ export default function PrivacyPage() {
               Known prototype limits
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">
-              For simplicity in this prototype, logged-in users can read profile
-              rows for client-side matching, and photo blur is applied visually
-              in CSS. A production release would move matching into a
-              server-side function returning only safe fields and swap blurred
-              image sources on the server.
+              Matching runs on the server and returns only safe display fields
+              (each user&apos;s full profile row is readable only by its owner).
+              Photo blur is applied visually in CSS on placeholder illustration
+              avatars; a production launch using real photos would store
+              pre-blurred files and swap signed URLs on the server.
             </p>
           </section>
         </div>

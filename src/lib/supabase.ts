@@ -41,23 +41,26 @@ export function getRelationshipGoalLabel(
   return RELATIONSHIP_GOALS.find((g) => g.key === goal)?.label ?? null;
 }
 
-export interface Profile {
+export interface SafePartnerProfile {
   id: string;
   full_name: string;
   age: number;
   gender: string;
-  looking_for: string;
   city: string;
   role_title: string | null;
-  company_domain: string | null;
-  college_name: string | null;
   batch: number | null;
-  hide_same_company: boolean;
-  hide_same_college: boolean;
   bio_prompt: string | null;
   avatar_url: string | null;
   relationship_goal: RelationshipGoal | null;
   prompts: ProfilePrompt[] | null;
+}
+
+export interface Profile extends SafePartnerProfile {
+  looking_for: string;
+  company_domain: string | null;
+  college_name: string | null;
+  hide_same_company: boolean;
+  hide_same_college: boolean;
   q1: number | null;
   q2: number | null;
   q3: number | null;

@@ -5,6 +5,7 @@ import {
   supabase,
   getRelationshipGoalLabel,
   type Profile,
+  type SafePartnerProfile,
 } from "@/lib/supabase";
 import { countWords, getUnblurStatus } from "@/lib/unblur";
 import WavePair from "@/components/WavePair";
@@ -38,7 +39,7 @@ function generateShareToken(): string {
 interface ChatProps {
   currentUser: Profile;
   matchId: string;
-  partner: Profile;
+  partner: SafePartnerProfile;
   compatibilityScore: number;
   onBack: () => void;
   onBlocked: () => void;
