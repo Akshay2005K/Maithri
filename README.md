@@ -1,4 +1,4 @@
-# pHavelength (Prototype)
+# pHavelength 
 
 An intentional dating web application built for the **eLitmus Software Developer assignment ("Start up founder of a Dating App")**, designed for early-career Indian graduates (2020–2023 batches, ages ~22–28) in tech-hub cities.
 
