@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase, type Profile } from "@/lib/supabase";
+import type { MatchWithProfile } from "@/lib/matching";
 import AuthForm from "@/components/AuthForm";
 import Onboarding from "@/components/Onboarding";
 import Quiz from "@/components/Quiz";
 import Matches from "@/components/Matches";
+import Chat from "@/components/Chat";
 
 function isQuizComplete(profile: Profile | null): boolean {
   if (!profile) return false;
@@ -26,6 +28,7 @@ export default function HomePage() {
   const [editingStep, setEditingStep] = useState<"onboarding" | "quiz" | null>(
     null
   );
+  const [activeChat, setActiveChat] = useState<MatchWithProfile | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -44,6 +47,7 @@ export default function HomePage() {
       else {
         setProfile(null);
         setEditingStep(null);
+        setActiveChat(null);
         setLoading(false);
       }
     });
@@ -117,11 +121,21 @@ export default function HomePage() {
             setEditingStep(null);
           }}
         />
+      ) : activeChat ? (
+        <Chat
+          currentUser={profile}
+          matchId={activeChat.matchId}
+          partner={activeChat.partner}
+          compatibilityScore={activeChat.compatibilityScore}
+          onBack={() => setActiveChat(null)}
+          onBlocked={() => setActiveChat(null)}
+        />
       ) : (
         <Matches
           profile={profile}
           onEditProfile={() => setEditingStep("onboarding")}
           onRetakeQuiz={() => setEditingStep("quiz")}
+          onOpenChat={(match) => setActiveChat(match)}
         />
       )}
     </main>

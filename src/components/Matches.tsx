@@ -1,25 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Profile } from "@/lib/supabase";
+import { supabase, type Profile } from "@/lib/supabase";
 import {
   getOrCreateTodaysMatches,
   type MatchWithProfile,
 } from "@/lib/matching";
+import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
 
 interface MatchesProps {
   profile: Profile;
   onEditProfile: () => void;
   onRetakeQuiz: () => void;
+  onOpenChat: (match: MatchWithProfile) => void;
 }
 
 export default function Matches({
   profile,
   onEditProfile,
   onRetakeQuiz,
+  onOpenChat,
 }: MatchesProps) {
   const [todaysMatches, setTodaysMatches] = useState<MatchWithProfile[]>([]);
   const [earlierMatches, setEarlierMatches] = useState<MatchWithProfile[]>([]);
+  const [unblurByMatch, setUnblurByMatch] = useState<Record<string, UnblurStatus>>(
+    {}
+  );
   const [hiddenCount, setHiddenCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -33,8 +39,29 @@ export default function Matches({
       try {
         const result = await getOrCreateTodaysMatches(profile);
         if (!active) return;
+
+        const allMatchIds = [
+          ...result.todaysMatches.map((m) => m.matchId),
+          ...result.earlierMatches.map((m) => m.matchId),
+        ];
+
+        const statusMap: Record<string, UnblurStatus> = {};
+        if (allMatchIds.length > 0) {
+          const { data: msgRows } = await supabase
+            .from("messages")
+            .select("match_id, sender_id, content")
+            .in("match_id", allMatchIds);
+
+          for (const id of allMatchIds) {
+            const matchMsgs = (msgRows ?? []).filter((m) => m.match_id === id);
+            statusMap[id] = getUnblurStatus(matchMsgs);
+          }
+        }
+
+        if (!active) return;
         setTodaysMatches(result.todaysMatches);
         setEarlierMatches(result.earlierMatches);
+        setUnblurByMatch(statusMap);
         setHiddenCount(result.hiddenByShieldCount);
         setHasMore(result.hasMoreCandidates);
       } catch (err) {
@@ -60,7 +87,7 @@ export default function Matches({
 
   return (
     <div className="space-y-5">
-      {/* Top Status & Privacy Shield Banner */}
+      {/* Top Status & Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 p-4">
         <div>
           <h2 className="text-base font-semibold text-white">
@@ -112,24 +139,34 @@ export default function Matches({
       {todaysMatches.length === 0 ? (
         <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-400">
           No eligible matches found right now in {profile.city} or nearby
-          cities. Try running the seed script or adjusting your preferences.
+          cities.
         </div>
       ) : (
         <div className="space-y-4">
           {todaysMatches.map((item) => (
-            <MatchCard key={item.matchId} item={item} />
+            <MatchCard
+              key={item.matchId}
+              item={item}
+              unblur={unblurByMatch[item.matchId]}
+              onOpenChat={() => onOpenChat(item)}
+            />
           ))}
         </div>
       )}
 
-      {/* Earlier Seeded / Active Matches (e.g. if seed ran on a prior day) */}
+      {/* Earlier Active Matches */}
       {earlierMatches.length > 0 && (
         <div className="space-y-3 pt-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Previous Active Matches
           </h3>
           {earlierMatches.map((item) => (
-            <MatchCard key={item.matchId} item={item} />
+            <MatchCard
+              key={item.matchId}
+              item={item}
+              unblur={unblurByMatch[item.matchId]}
+              onOpenChat={() => onOpenChat(item)}
+            />
           ))}
         </div>
       )}
@@ -151,8 +188,18 @@ export default function Matches({
   );
 }
 
-function MatchCard({ item }: { item: MatchWithProfile }) {
+function MatchCard({
+  item,
+  unblur,
+  onOpenChat,
+}: {
+  item: MatchWithProfile;
+  unblur?: UnblurStatus;
+  onOpenChat: () => void;
+}) {
   const { partner, compatibilityScore } = item;
+  const blurClass = unblur?.blurClass ?? "blur-xl";
+  const level = unblur?.level ?? 1;
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-5">
@@ -160,12 +207,14 @@ function MatchCard({ item }: { item: MatchWithProfile }) {
         <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
           <img
             src={partner.avatar_url || "/avatars/avatar-1.svg"}
-            alt="Blurred placeholder avatar"
-            className="h-full w-full object-cover blur-xl scale-110"
+            alt="Match placeholder avatar"
+            className={`h-full w-full object-cover transition-all ${blurClass}`}
           />
-          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-white/90">
-            Blurred
-          </span>
+          {level < 3 && (
+            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-white/90">
+              Lvl {level}
+            </span>
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -173,7 +222,7 @@ function MatchCard({ item }: { item: MatchWithProfile }) {
             <h3 className="text-base font-semibold text-white">
               {partner.full_name}, {partner.age}
             </h3>
-            <span className="rounded-full bg-emerald-950 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-800/60">
+            <span className="rounded-full border border-emerald-800/60 bg-emerald-950 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
               {compatibilityScore}% Match
             </span>
           </div>
@@ -183,7 +232,7 @@ function MatchCard({ item }: { item: MatchWithProfile }) {
             {partner.batch}
           </p>
 
-          <p className="mt-1 inline-block rounded bg-amber-950/50 px-2 py-0.5 text-[11px] text-amber-300 border border-amber-800/40">
+          <p className="mt-1 inline-block rounded border border-amber-800/40 bg-amber-950/50 px-2 py-0.5 text-[11px] text-amber-300">
             Simulated eLitmus verification (prototype)
           </p>
 
@@ -196,10 +245,14 @@ function MatchCard({ item }: { item: MatchWithProfile }) {
       </div>
 
       <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3 text-xs text-slate-400">
-        <span>Photo unblurs through conversation (Phase 4 Chat)</span>
-        <span className="rounded bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300">
-          Chat coming in Phase 4
-        </span>
+        <span>{unblur?.label ?? "Level 1 (Blurred)"}</span>
+        <button
+          type="button"
+          onClick={onOpenChat}
+          className="rounded bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+        >
+          Open Chat
+        </button>
       </div>
     </div>
   );
