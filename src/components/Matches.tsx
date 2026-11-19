@@ -112,13 +112,6 @@ export default function Matches({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={onEditProfile}
-            className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
-          >
-            Edit profile and shield
-          </button>
-          <button
-            type="button"
             onClick={onRetakeQuiz}
             className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
           >
