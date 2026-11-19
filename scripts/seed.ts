@@ -288,7 +288,10 @@ async function runSeed() {
       userId = created.user.id;
       console.log(`Created auth user: ${user.email}`);
     } else {
-      console.log(`Auth user already exists: ${user.email}`);
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        email_confirm: true,
+      });
+      console.log(`Auth user already exists (email confirmed): ${user.email}`);
     }
 
     idByEmail[user.email] = userId;

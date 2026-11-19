@@ -37,18 +37,24 @@ export default function HomePage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) loadProfile(currentUser.id);
+      const candidateUser = session?.user ?? null;
+      const confirmedUser = candidateUser?.email_confirmed_at
+        ? candidateUser
+        : null;
+      setUser(confirmedUser);
+      if (confirmedUser) loadProfile(confirmedUser.id);
       else setLoading(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) loadProfile(currentUser.id);
+      const candidateUser = session?.user ?? null;
+      const confirmedUser = candidateUser?.email_confirmed_at
+        ? candidateUser
+        : null;
+      setUser(confirmedUser);
+      if (confirmedUser) loadProfile(confirmedUser.id);
       else {
         setProfile(null);
         setEditingStep(null);
