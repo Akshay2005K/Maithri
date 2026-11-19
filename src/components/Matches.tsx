@@ -14,7 +14,6 @@ import WavePair from "@/components/WavePair";
 interface MatchesProps {
   profile: Profile;
   onEditProfile: () => void;
-  onRetakeQuiz: () => void;
   onOpenChat: (match: MatchWithProfile) => void;
   onProfileUpdated: (updated: Profile) => void;
 }
@@ -22,7 +21,6 @@ interface MatchesProps {
 export default function Matches({
   profile,
   onEditProfile,
-  onRetakeQuiz,
   onOpenChat,
   onProfileUpdated,
 }: MatchesProps) {
@@ -111,28 +109,16 @@ export default function Matches({
 
   return (
     <section className="space-y-6">
-      {/* Page Header & Controls */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dusk/15 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-dusk">
-            Today&apos;s curated matches ({todaysMatches.length}/
-            {profile.is_plus_mock ? 4 : 3})
-          </h1>
-          <p className="mt-1 text-sm text-ink/80">
-            Generated on open from your compatibility quiz and city (
-            {profile.city}).
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onRetakeQuiz}
-            className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
-          >
-            Retake quiz
-          </button>
-        </div>
+      {/* Page Header */}
+      <div className="border-b border-dusk/15 pb-5">
+        <h1 className="text-2xl font-bold text-dusk">
+          Today&apos;s curated matches ({todaysMatches.length}/
+          {profile.is_plus_mock ? 4 : 3})
+        </h1>
+        <p className="mt-1 text-sm text-ink/80">
+          Generated on open from your compatibility quiz and city (
+          {profile.city}).
+        </p>
       </div>
 
       {/* Privacy Shield Status */}
