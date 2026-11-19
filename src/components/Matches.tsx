@@ -7,12 +7,14 @@ import {
   type MatchWithProfile,
 } from "@/lib/matching";
 import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
+import PaywallModal from "@/components/PaywallModal";
 
 interface MatchesProps {
   profile: Profile;
   onEditProfile: () => void;
   onRetakeQuiz: () => void;
   onOpenChat: (match: MatchWithProfile) => void;
+  onProfileUpdated: (updated: Profile) => void;
 }
 
 export default function Matches({
@@ -20,6 +22,7 @@ export default function Matches({
   onEditProfile,
   onRetakeQuiz,
   onOpenChat,
+  onProfileUpdated,
 }: MatchesProps) {
   const [todaysMatches, setTodaysMatches] = useState<MatchWithProfile[]>([]);
   const [earlierMatches, setEarlierMatches] = useState<MatchWithProfile[]>([]);
@@ -28,6 +31,7 @@ export default function Matches({
   );
   const [hiddenCount, setHiddenCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +81,16 @@ export default function Matches({
     };
   }, [profile]);
 
+  async function handleResetMockPlus() {
+    const { data } = await supabase
+      .from("profiles")
+      .update({ is_plus_mock: false })
+      .eq("id", profile.id)
+      .select()
+      .single();
+    if (data) onProfileUpdated(data as Profile);
+  }
+
   if (loading) {
     return (
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-300">
@@ -99,7 +113,7 @@ export default function Matches({
             ({profile.city}).
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={onEditProfile}
             className="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
@@ -128,6 +142,22 @@ export default function Matches({
           : ""}
         .
       </div>
+
+      {profile.is_plus_mock && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-800/50 bg-amber-950/20 px-4 py-2.5 text-xs text-amber-200">
+          <span>
+            <strong>Mock Plus Active:</strong> 4th daily match slot unlocked
+            (no payment).
+          </span>
+          <button
+            type="button"
+            onClick={handleResetMockPlus}
+            className="text-[11px] text-amber-300 underline hover:text-white"
+          >
+            Reset to Free
+          </button>
+        </div>
+      )}
 
       {error && (
         <p className="rounded border border-red-800 bg-red-950/40 p-3 text-xs text-red-300">
@@ -171,18 +201,37 @@ export default function Matches({
         </div>
       )}
 
-      {/* 4th Match Teaser (wired to Mock Paywall in Phase 5) */}
-      {!profile.is_plus_mock && hasMore && (
-        <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-4 text-center">
-          <p className="text-xs text-slate-300">
-            Daily limit reached (3/3 free matches). A 4th compatible match is
-            available.
+      {/* 4th Match Mock Paywall Trigger */}
+      {!profile.is_plus_mock && todaysMatches.length >= 3 && (
+        <div className="rounded-lg border border-dashed border-violet-700/70 bg-slate-900/70 p-4 text-center">
+          <p className="text-xs text-slate-200">
+            Daily limit reached (3/3 free matches).{" "}
+            {hasMore
+              ? "A 4th compatible match is available today."
+              : "Upgrade unlocks up to 4 matches/day."}
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Mock paywall modal (&quot;Unlock 4th daily match&quot;) will be
-            connected in Phase 5.
+          <button
+            type="button"
+            onClick={() => setShowPaywall(true)}
+            className="mt-2.5 rounded bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+          >
+            Unlock 4th Daily Match (Mock Paywall)
+          </button>
+          <p className="mt-1.5 text-[11px] text-amber-300/80">
+            Mock paywall, no payment
           </p>
         </div>
+      )}
+
+      {showPaywall && (
+        <PaywallModal
+          profile={profile}
+          onClose={() => setShowPaywall(false)}
+          onUnlocked={(updated) => {
+            setShowPaywall(false);
+            onProfileUpdated(updated);
+          }}
+        />
       )}
     </div>
   );
