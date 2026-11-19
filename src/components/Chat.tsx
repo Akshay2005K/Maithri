@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase, type Profile } from "@/lib/supabase";
+import {
+  supabase,
+  getRelationshipGoalLabel,
+  type Profile,
+} from "@/lib/supabase";
 import { countWords, getUnblurStatus } from "@/lib/unblur";
 import WavePair from "@/components/WavePair";
 
@@ -10,7 +14,25 @@ interface MessageRow {
   match_id: string;
   sender_id: string;
   content: string;
+  reply_to_prompt_key: string | null;
   created_at: string;
+}
+
+interface DatePlanRow {
+  id: string;
+  match_id: string;
+  created_by: string;
+  place_name: string;
+  plan_time: string;
+  share_token: string;
+  expires_at: string;
+  created_at: string;
+}
+
+function generateShareToken(): string {
+  const bytes = new Uint8Array(20);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 interface ChatProps {
@@ -47,19 +69,38 @@ export default function Chat({
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
   const [blocking, setBlocking] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const [selectedPromptKey, setSelectedPromptKey] = useState<string>("");
+
+  const [datePlan, setDatePlan] = useState<DatePlanRow | null>(null);
+  const [placeName, setPlaceName] = useState("");
+  const [planTime, setPlanTime] = useState("");
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [deletingPlan, setDeletingPlan] = useState(false);
+  const [planMessage, setPlanMessage] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   async function fetchMessages() {
-    const { data, error: fetchErr } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("match_id", matchId)
-      .order("created_at", { ascending: true });
+    const [{ data, error: fetchErr }, { data: planData }] = await Promise.all([
+      supabase
+        .from("messages")
+        .select("*")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("date_plans")
+        .select("*")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
     if (fetchErr) {
       setError(`${fetchErr.message} Click Refresh messages to try again.`);
     } else if (data) {
       setMessages(data as MessageRow[]);
     }
+    setDatePlan((planData as DatePlanRow) ?? null);
     setLoading(false);
   }
 
@@ -72,10 +113,34 @@ export default function Chat({
 
   const unblur = getUnblurStatus(messages);
   const wordCount = countWords(draft);
+  const partnerPrompts = Array.isArray(partner.prompts) ? partner.prompts : [];
+  const myPrompts = Array.isArray(currentUser.prompts)
+    ? currentUser.prompts
+    : [];
+  const isFirstMessage = !loading && messages.length === 0;
+
+  function findPromptAnswer(key: string, senderId: string): string | null {
+    // If I sent the message, I replied to partner's prompt; if partner sent it, they replied to mine.
+    const pool = senderId === currentUser.id ? partnerPrompts : myPrompts;
+    return (
+      pool.find((p) => p.key === key)?.answer ??
+      partnerPrompts.find((p) => p.key === key)?.answer ??
+      myPrompts.find((p) => p.key === key)?.answer ??
+      null
+    );
+  }
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Enforced in the UI only: the first message in a match must reply to a partner prompt.
+    if (isFirstMessage && partnerPrompts.length > 0 && !selectedPromptKey) {
+      setError(
+        "Pick one of your match's prompts below before sending your first message."
+      );
+      return;
+    }
 
     if (wordCount < 4) {
       setError(
@@ -91,6 +156,8 @@ export default function Chat({
         match_id: matchId,
         sender_id: currentUser.id,
         content: draft.trim(),
+        reply_to_prompt_key:
+          isFirstMessage && selectedPromptKey ? selectedPromptKey : null,
       })
       .select("*")
       .single();
@@ -104,6 +171,7 @@ export default function Chat({
 
     setMessages((prev) => [...prev, data as MessageRow]);
     setDraft("");
+    setSelectedPromptKey("");
   }
 
   async function handleReportAndBlock() {
@@ -124,6 +192,88 @@ export default function Chat({
     }
 
     onBlocked();
+  }
+
+  async function handleCreatePlan(e: React.FormEvent) {
+    e.preventDefault();
+    setPlanError(null);
+    setPlanMessage(null);
+
+    const trimmedPlace = placeName.trim();
+    if (!trimmedPlace) {
+      setPlanError("Enter a public place name before creating a meetup plan.");
+      return;
+    }
+    const parsedTime = new Date(planTime);
+    if (!planTime || Number.isNaN(parsedTime.getTime())) {
+      setPlanError("Choose a valid date and time for your meetup.");
+      return;
+    }
+
+    const expiresAt = new Date(
+      parsedTime.getTime() + 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    setSavingPlan(true);
+    const { data, error: insertErr } = await supabase
+      .from("date_plans")
+      .insert({
+        match_id: matchId,
+        created_by: currentUser.id,
+        place_name: trimmedPlace,
+        plan_time: parsedTime.toISOString(),
+        share_token: generateShareToken(),
+        expires_at: expiresAt,
+      })
+      .select("*")
+      .single();
+    setSavingPlan(false);
+
+    if (insertErr) {
+      setPlanError(
+        `${insertErr.message} Make sure you have exchanged 3+ valid messages from both sides.`
+      );
+      return;
+    }
+
+    setDatePlan(data as DatePlanRow);
+    setPlaceName("");
+    setPlanTime("");
+    setPlanMessage("Meetup plan created. Copy the link below to share with a friend.");
+  }
+
+  async function handleCopyPlanLink() {
+    if (!datePlan) return;
+    setPlanError(null);
+    const shareUrl = `${window.location.origin}/plan/${datePlan.share_token}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setPlanMessage("Link copied to clipboard.");
+    } catch {
+      setPlanMessage(`Copy this link: ${shareUrl}`);
+    }
+  }
+
+  async function handleDeletePlan() {
+    if (!datePlan) return;
+    setPlanError(null);
+    setPlanMessage(null);
+    setDeletingPlan(true);
+
+    const { error: delErr } = await supabase
+      .from("date_plans")
+      .delete()
+      .eq("id", datePlan.id);
+
+    setDeletingPlan(false);
+
+    if (delErr) {
+      setPlanError(`${delErr.message} Please try deleting the plan again.`);
+      return;
+    }
+
+    setDatePlan(null);
+    setPlanMessage("Meetup plan deleted.");
   }
 
   return (
@@ -203,9 +353,16 @@ export default function Chat({
                   {partner.role_title || "Graduate"} • {partner.city} • Batch{" "}
                   {partner.batch}
                 </p>
-                <p className="inline-block rounded border border-marigold bg-marigold/20 px-2 py-0.5 text-xs font-medium text-ink">
-                  Simulated eLitmus verification (prototype)
-                </p>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  <span className="inline-block rounded border border-marigold bg-marigold/20 px-2 py-0.5 text-xs font-medium text-ink">
+                    Simulated eLitmus verification (prototype)
+                  </span>
+                  {getRelationshipGoalLabel(partner.relationship_goal) && (
+                    <span className="inline-block rounded border border-teal/50 bg-teal/15 px-2 py-0.5 text-xs font-medium text-ink">
+                      {getRelationshipGoalLabel(partner.relationship_goal)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -213,6 +370,25 @@ export default function Chat({
               <p className="font-serif text-sm leading-relaxed text-ink/90">
                 &ldquo;{partner.bio_prompt}&rdquo;
               </p>
+            )}
+
+            {partnerPrompts.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-dusk">Prompts</h3>
+                {partnerPrompts.map((prompt) => (
+                  <div
+                    key={prompt.key}
+                    className="rounded border border-dusk/15 bg-dusk/5 px-3 py-2"
+                  >
+                    <p className="text-xs font-semibold text-dusk">
+                      {prompt.key}
+                    </p>
+                    <p className="mt-0.5 font-serif text-sm leading-relaxed text-ink/90">
+                      {prompt.answer}
+                    </p>
+                  </div>
+                ))}
+              </div>
             )}
 
             <div className="border-y border-dusk/15 py-3">
@@ -244,6 +420,125 @@ export default function Chat({
                   }`}
                 />
               </div>
+            </div>
+
+            {/* Plan a meetup (Available only at unblur Level 3) */}
+            <div className="space-y-3 rounded-lg border border-dusk/20 bg-dusk/5 p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-dusk">
+                  Plan a meetup
+                </h3>
+                <p className="mt-0.5 text-xs font-medium text-ink/80">
+                  Meet in a public place.
+                </p>
+              </div>
+
+              {unblur.level < 3 ? (
+                <p className="text-xs leading-relaxed text-ink/75">
+                  Unlocks at Level 3 after at least 3 meaningful messages from
+                  both sides.
+                </p>
+              ) : datePlan ? (
+                <div className="space-y-3 rounded border border-dusk/15 bg-fog p-3.5 text-xs text-ink">
+                  <div>
+                    <p className="font-semibold text-dusk">
+                      {datePlan.place_name}
+                    </p>
+                    <p className="mt-0.5 text-ink/80">
+                      {new Date(datePlan.plan_time).toLocaleString()}
+                    </p>
+                    <p className="mt-1 text-ink/70">
+                      Link expires{" "}
+                      {new Date(datePlan.expires_at).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyPlanLink}
+                      className="inline-flex min-h-[44px] w-full items-center justify-center rounded bg-dusk px-3 text-xs font-medium text-fog hover:bg-dusk/90"
+                    >
+                      Copy link for a friend
+                    </button>
+                    <a
+                      href={`/plan/${datePlan.share_token}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-dusk hover:bg-dusk/10"
+                    >
+                      Preview shared link
+                    </a>
+                    <button
+                      type="button"
+                      disabled={deletingPlan}
+                      onClick={handleDeletePlan}
+                      className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-marigold bg-marigold/20 px-3 text-xs font-medium text-ink disabled:opacity-50"
+                    >
+                      {deletingPlan ? "Deleting plan..." : "Delete plan"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleCreatePlan} className="space-y-3">
+                  <div>
+                    <label
+                      htmlFor="plan-place"
+                      className="block text-xs font-medium text-ink"
+                    >
+                      Place name
+                    </label>
+                    <input
+                      id="plan-place"
+                      type="text"
+                      required
+                      value={placeName}
+                      onChange={(e) => setPlaceName(e.target.value)}
+                      placeholder="e.g. Third Wave Coffee, Indiranagar"
+                      className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-xs text-ink placeholder:text-ink/50"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="plan-time"
+                      className="block text-xs font-medium text-ink"
+                    >
+                      Date and time
+                    </label>
+                    <input
+                      id="plan-time"
+                      type="datetime-local"
+                      required
+                      value={planTime}
+                      onChange={(e) => setPlanTime(e.target.value)}
+                      className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-xs text-ink"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingPlan}
+                    className="inline-flex min-h-[44px] w-full items-center justify-center rounded bg-dusk px-4 text-xs font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
+                  >
+                    {savingPlan ? "Creating plan..." : "Create meetup plan"}
+                  </button>
+                </form>
+              )}
+
+              {planMessage && (
+                <p className="rounded border border-teal bg-teal/15 p-2.5 text-xs font-medium text-ink">
+                  {planMessage}
+                </p>
+              )}
+              {planError && (
+                <p
+                  role="alert"
+                  className="rounded border border-marigold bg-marigold/20 p-2.5 text-xs font-medium text-ink"
+                >
+                  {planError}
+                </p>
+              )}
             </div>
 
             {/* Report / Block */}
@@ -334,19 +629,40 @@ export default function Chat({
             <div className="my-4 max-h-96 space-y-3 overflow-y-auto pr-1">
               {messages.map((msg) => {
                 const isMine = msg.sender_id === currentUser.id;
+                const promptAnswer = msg.reply_to_prompt_key
+                  ? findPromptAnswer(msg.reply_to_prompt_key, msg.sender_id)
+                  : null;
                 return (
                   <div
                     key={msg.id}
                     className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-lg px-4 py-2.5 font-serif text-sm leading-relaxed ${
+                      className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm leading-relaxed ${
                         isMine
                           ? "bg-dusk text-fog"
                           : "border border-dusk/20 bg-dusk/5 text-ink"
                       }`}
                     >
-                      <p>{msg.content}</p>
+                      {msg.reply_to_prompt_key && (
+                        <blockquote
+                          className={`mb-2 border-l-2 pl-2.5 text-xs ${
+                            isMine
+                              ? "border-marigold text-fog/85"
+                              : "border-teal text-ink/80"
+                          }`}
+                        >
+                          <span className="font-sans font-semibold">
+                            {msg.reply_to_prompt_key}
+                          </span>
+                          {promptAnswer && (
+                            <span className="mt-0.5 block font-serif">
+                              &ldquo;{promptAnswer}&rdquo;
+                            </span>
+                          )}
+                        </blockquote>
+                      )}
+                      <p className="font-serif">{msg.content}</p>
                     </div>
                   </div>
                 );
@@ -358,6 +674,37 @@ export default function Chat({
             onSubmit={handleSend}
             className="mt-auto space-y-3 border-t border-dusk/15 pt-4"
           >
+            {isFirstMessage && partnerPrompts.length > 0 && (
+              <fieldset className="space-y-2 rounded-lg border border-teal/40 bg-teal/10 p-3.5">
+                <legend className="text-xs font-semibold text-dusk">
+                  Reply to one of {partner.full_name}&apos;s prompts to start
+                </legend>
+                <div className="space-y-2">
+                  {partnerPrompts.map((prompt) => {
+                    const selected = selectedPromptKey === prompt.key;
+                    return (
+                      <button
+                        key={prompt.key}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setSelectedPromptKey(prompt.key)}
+                        className={`min-h-[44px] w-full rounded border px-3 py-2.5 text-left ${
+                          selected
+                            ? "border-dusk bg-dusk text-fog"
+                            : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+                        }`}
+                      >
+                        <p className="text-xs font-semibold">{prompt.key}</p>
+                        <p className="mt-0.5 font-serif text-sm leading-snug">
+                          {prompt.answer}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            )}
+
             <div>
               <label
                 htmlFor="chat-message-input"

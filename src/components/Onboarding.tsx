@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { supabase, type Profile } from "@/lib/supabase";
+import {
+  supabase,
+  RELATIONSHIP_GOALS,
+  PROMPT_KEYS,
+  type Profile,
+  type ProfilePrompt,
+  type RelationshipGoal,
+} from "@/lib/supabase";
 
 const AVATAR_OPTIONS = [
   "/avatars/avatar-1.svg",
@@ -55,6 +62,24 @@ export default function Onboarding({
   const [avatarUrl, setAvatarUrl] = useState(
     existingProfile?.avatar_url ?? AVATAR_OPTIONS[0]
   );
+  const [relationshipGoal, setRelationshipGoal] = useState<
+    RelationshipGoal | ""
+  >(existingProfile?.relationship_goal ?? "");
+  const [prompts, setPrompts] = useState<ProfilePrompt[]>(() => {
+    const existing = Array.isArray(existingProfile?.prompts)
+      ? existingProfile.prompts
+      : [];
+    if (existing.length >= 2) return existing.slice(0, 3);
+    if (existing.length === 1) {
+      const nextKey =
+        PROMPT_KEYS.find((k) => k !== existing[0].key) ?? PROMPT_KEYS[1];
+      return [existing[0], { key: nextKey, answer: "" }];
+    }
+    return [
+      { key: PROMPT_KEYS[0], answer: "" },
+      { key: PROMPT_KEYS[1], answer: "" },
+    ];
+  });
   const [dpdpConsent, setDpdpConsent] = useState(
     Boolean(existingProfile?.dpdp_consent_at)
   );
@@ -64,6 +89,40 @@ export default function Onboarding({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Required relationship goal
+    if (!relationshipGoal) {
+      setError(
+        "Select your relationship goal above before saving your profile."
+      );
+      return;
+    }
+
+    // Validate 2 to 3 profile prompts (10-200 characters, unique keys)
+    const cleanedPrompts = prompts.map((p) => ({
+      key: p.key,
+      answer: p.answer.trim(),
+    }));
+    if (cleanedPrompts.length < 2 || cleanedPrompts.length > 3) {
+      setError("Complete at least 2 prompts (and at most 3) before saving.");
+      return;
+    }
+    const seenKeys = new Set<string>();
+    for (const item of cleanedPrompts) {
+      if (seenKeys.has(item.key)) {
+        setError(
+          `Pick a different prompt topic for each slot ("${item.key}" is selected twice).`
+        );
+        return;
+      }
+      seenKeys.add(item.key);
+      if (item.answer.length < 10 || item.answer.length > 200) {
+        setError(
+          `Your answer for "${item.key}" must be between 10 and 200 characters (currently ${item.answer.length}).`
+        );
+        return;
+      }
+    }
 
     // Hard 18+ age gate on the client (also enforced in Postgres via CHECK (age >= 18))
     if (!isOver18Confirmed || Number(age) < 18) {
@@ -98,6 +157,8 @@ export default function Onboarding({
       hide_same_college: hideSameCollege,
       bio_prompt: bioPrompt.trim() || null,
       avatar_url: avatarUrl,
+      relationship_goal: relationshipGoal,
+      prompts: cleanedPrompts,
       dpdp_consent_at:
         existingProfile?.dpdp_consent_at ?? new Date().toISOString(),
     };
@@ -265,6 +326,37 @@ export default function Onboarding({
           </div>
         </div>
 
+        {/* Relationship Goal (Required single-choice) */}
+        <fieldset className="space-y-2.5">
+          <legend className="text-sm font-medium text-ink">
+            What are you looking for?
+          </legend>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {RELATIONSHIP_GOALS.map((goal) => (
+              <label
+                key={goal.key}
+                htmlFor={`onb-goal-${goal.key}`}
+                className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded border px-3 py-2 text-sm ${
+                  relationshipGoal === goal.key
+                    ? "border-dusk bg-dusk text-fog font-medium"
+                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+                }`}
+              >
+                <input
+                  id={`onb-goal-${goal.key}`}
+                  type="radio"
+                  name="relationship_goal"
+                  value={goal.key}
+                  checked={relationshipGoal === goal.key}
+                  onChange={() => setRelationshipGoal(goal.key)}
+                  className="h-4 w-4 shrink-0 accent-teal"
+                />
+                <span>{goal.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         {/* Simulated eLitmus Career & Batch Section */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -358,6 +450,113 @@ export default function Onboarding({
             className="mt-1.5 w-full rounded border border-dusk/30 bg-fog px-3 py-2.5 font-serif text-sm leading-relaxed text-ink placeholder:font-sans placeholder:text-ink/50"
           />
         </div>
+
+        {/* Profile Prompts (2 required, up to 3, 10-200 chars each) */}
+        <fieldset className="space-y-4 rounded-lg border border-dusk/15 bg-dusk/5 p-4">
+          <div>
+            <legend className="text-sm font-semibold text-dusk">
+              Profile prompts (at least 2 required, up to 3)
+            </legend>
+            <p className="mt-0.5 text-xs text-ink/75">
+              Matches read these before chatting and reply to one on their first
+              message. Keep each answer between 10 and 200 characters.
+            </p>
+          </div>
+
+          {prompts.map((item, idx) => (
+            <div
+              key={idx}
+              className="space-y-2 rounded border border-dusk/15 bg-fog p-3.5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label
+                  htmlFor={`onb-prompt-key-${idx}`}
+                  className="text-xs font-medium text-ink"
+                >
+                  Prompt topic
+                </label>
+                {idx === 2 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPrompts((prev) => prev.filter((_, i) => i !== 2))
+                    }
+                    className="inline-flex min-h-[44px] items-center rounded px-2 text-xs font-medium text-dusk underline underline-offset-4"
+                  >
+                    Remove third prompt
+                  </button>
+                )}
+              </div>
+
+              <select
+                id={`onb-prompt-key-${idx}`}
+                value={item.key}
+                onChange={(e) =>
+                  setPrompts((prev) =>
+                    prev.map((p, i) =>
+                      i === idx ? { ...p, key: e.target.value } : p
+                    )
+                  )
+                }
+                className="min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
+              >
+                {PROMPT_KEYS.map((key) => {
+                  const usedElsewhere = prompts.some(
+                    (other, otherIdx) => otherIdx !== idx && other.key === key
+                  );
+                  return (
+                    <option key={key} value={key} disabled={usedElsewhere}>
+                      {key}
+                    </option>
+                  );
+                })}
+              </select>
+
+              <div>
+                <label
+                  htmlFor={`onb-prompt-answer-${idx}`}
+                  className="block text-xs font-medium text-ink"
+                >
+                  Your answer
+                </label>
+                <textarea
+                  id={`onb-prompt-answer-${idx}`}
+                  rows={2}
+                  maxLength={200}
+                  value={item.answer}
+                  onChange={(e) =>
+                    setPrompts((prev) =>
+                      prev.map((p, i) =>
+                        i === idx ? { ...p, answer: e.target.value } : p
+                      )
+                    )
+                  }
+                  placeholder="Write 10 to 200 characters..."
+                  className="mt-1 w-full rounded border border-dusk/30 bg-fog px-3 py-2 font-serif text-sm leading-relaxed text-ink placeholder:font-sans placeholder:text-ink/50"
+                />
+                <p className="mt-1 text-xs text-ink/70">
+                  {item.answer.trim().length}/200 characters (minimum 10)
+                </p>
+              </div>
+            </div>
+          ))}
+
+          {prompts.length < 3 && (
+            <button
+              type="button"
+              onClick={() => {
+                const unusedKey =
+                  PROMPT_KEYS.find(
+                    (k) => !prompts.some((existing) => existing.key === k)
+                  ) ?? PROMPT_KEYS[2];
+                setPrompts((prev) => [...prev, { key: unusedKey, answer: "" }]);
+              }}
+              className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-4 text-xs font-medium text-dusk hover:bg-dusk/10"
+            >
+              Add a third prompt
+            </button>
+          )}
+        </fieldset>
 
         {/* Privacy Shield Settings */}
         <div className="space-y-2 rounded-lg border border-dusk/15 bg-dusk/5 p-4">

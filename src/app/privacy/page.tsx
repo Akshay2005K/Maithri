@@ -68,6 +68,20 @@ export default function PrivacyPage() {
 
           <section className="space-y-2">
             <h2 className="text-lg font-semibold text-dusk">
+              Shared meetup plan links
+            </h2>
+            <p className="font-serif text-sm leading-relaxed text-ink/90">
+              When two unblurred matches create a meetup plan, the place name,
+              date and time, and both participants&apos; first names are stored
+              in <code>date_plans</code> and shared only by the link the user
+              copies. Anyone who has that link can view those four details until
+              the link expires 24 hours after the meetup time (or until either
+              participant deletes the plan).
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-dusk">
               Right to erasure (delete my account)
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">

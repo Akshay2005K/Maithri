@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase, type Profile } from "@/lib/supabase";
+import {
+  supabase,
+  getRelationshipGoalLabel,
+  type Profile,
+} from "@/lib/supabase";
 import {
   getOrCreateTodaysMatches,
   type MatchWithProfile,
@@ -285,14 +289,39 @@ function MatchRow({
             </span>
           </div>
 
-          <p className="inline-block rounded border border-marigold bg-marigold/20 px-2 py-0.5 text-xs font-medium text-ink">
-            Simulated eLitmus verification (prototype)
-          </p>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-block rounded border border-marigold bg-marigold/20 px-2 py-0.5 text-xs font-medium text-ink">
+              Simulated eLitmus verification (prototype)
+            </span>
+            {getRelationshipGoalLabel(partner.relationship_goal) && (
+              <span className="inline-block rounded border border-teal/50 bg-teal/15 px-2 py-0.5 text-xs font-medium text-ink">
+                {getRelationshipGoalLabel(partner.relationship_goal)}
+              </span>
+            )}
+          </div>
 
           {partner.bio_prompt && (
             <p className="pt-1 font-serif text-sm leading-relaxed text-ink/90">
               &ldquo;{partner.bio_prompt}&rdquo;
             </p>
+          )}
+
+          {Array.isArray(partner.prompts) && partner.prompts.length > 0 && (
+            <div className="space-y-2 pt-2">
+              {partner.prompts.map((prompt) => (
+                <div
+                  key={prompt.key}
+                  className="rounded border border-dusk/15 bg-dusk/5 px-3 py-2"
+                >
+                  <p className="text-xs font-semibold text-dusk">
+                    {prompt.key}
+                  </p>
+                  <p className="mt-0.5 font-serif text-sm leading-relaxed text-ink/90">
+                    {prompt.answer}
+                  </p>
+                </div>
+              ))}
+            </div>
           )}
 
           <p className="text-xs text-ink/70">

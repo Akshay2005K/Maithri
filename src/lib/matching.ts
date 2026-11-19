@@ -1,4 +1,13 @@
-import { supabase, type Profile } from "./supabase";
+import {
+  supabase,
+  RELATIONSHIP_GOALS,
+  type Profile,
+  type RelationshipGoal,
+} from "./supabase";
+
+const GOAL_ORDER: Record<RelationshipGoal, number> = Object.fromEntries(
+  RELATIONSHIP_GOALS.map((g) => [g.key, g.order])
+) as Record<RelationshipGoal, number>;
 
 export interface MatchWithProfile {
   matchId: string;
@@ -109,7 +118,19 @@ export async function getOrCreateTodaysMatches(me: Profile): Promise<{
     }
 
     if (existingPartnerIds.has(candidate.id)) continue;
-    eligible.push({ candidate, score: computeCompatibilityScore(me, candidate) });
+
+    // Relationship goal alignment: exclude diff >= 2, subtract 10 if diff === 1
+    if (!me.relationship_goal || !candidate.relationship_goal) continue;
+    const goalDiff = Math.abs(
+      GOAL_ORDER[me.relationship_goal] - GOAL_ORDER[candidate.relationship_goal]
+    );
+    if (goalDiff >= 2) continue;
+
+    const baseScore = computeCompatibilityScore(me, candidate);
+    const finalScore =
+      goalDiff === 1 ? Math.max(0, baseScore - 10) : baseScore;
+
+    eligible.push({ candidate, score: finalScore });
   }
 
   // Sort highest compatibility first and insert only up to today's remaining cap

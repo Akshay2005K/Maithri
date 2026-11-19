@@ -7,6 +7,40 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 // Supabase Auth stores the user's JWT session in browser localStorage automatically.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export type RelationshipGoal = "casual" | "open" | "long_term" | "marriage";
+
+export const RELATIONSHIP_GOALS: {
+  key: RelationshipGoal;
+  label: string;
+  order: number;
+}[] = [
+  { key: "casual", label: "Something casual", order: 0 },
+  { key: "open", label: "Open to see where it goes", order: 1 },
+  { key: "long_term", label: "A long-term relationship", order: 2 },
+  { key: "marriage", label: "Marriage", order: 3 },
+];
+
+export const PROMPT_KEYS = [
+  "A perfect Sunday",
+  "I'm happiest when",
+  "Something I'm learning",
+  "A small thing I care about",
+  "My ideal first date",
+  "A city habit I love",
+] as const;
+
+export interface ProfilePrompt {
+  key: string;
+  answer: string;
+}
+
+export function getRelationshipGoalLabel(
+  goal: RelationshipGoal | null | undefined
+): string | null {
+  if (!goal) return null;
+  return RELATIONSHIP_GOALS.find((g) => g.key === goal)?.label ?? null;
+}
+
 export interface Profile {
   id: string;
   full_name: string;
@@ -22,6 +56,8 @@ export interface Profile {
   hide_same_college: boolean;
   bio_prompt: string | null;
   avatar_url: string | null;
+  relationship_goal: RelationshipGoal | null;
+  prompts: ProfilePrompt[] | null;
   q1: number | null;
   q2: number | null;
   q3: number | null;

@@ -30,6 +30,8 @@ interface SeedUser {
   hide_same_college: boolean;
   bio_prompt: string;
   avatar_url: string;
+  relationship_goal: "casual" | "open" | "long_term" | "marriage";
+  prompts: { key: string; answer: string }[];
   q1: number;
   q2: number;
   q3: number;
@@ -54,6 +56,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "2022 grad in BLR. Enjoy Sunday Cubbon Park runs, filter coffee walks, and honest conversations.",
     avatar_url: "/avatars/avatar-1.svg",
+    relationship_goal: "long_term",
+    prompts: [
+      {
+        key: "A perfect Sunday",
+        answer: "Early Cubbon Park run, masala dosa at Airlines, and an hour reading in Indiranagar.",
+      },
+      {
+        key: "Something I'm learning",
+        answer: "How to brew clean V60 pour-over coffee without over-extracting it.",
+      },
+    ],
     q1: 4,
     q2: 3,
     q3: 4,
@@ -76,6 +89,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "2023 batch grad in Indiranagar. Big fan of indie theatre, bookstore hopping, and Coorg roadtrips.",
     avatar_url: "/avatars/avatar-2.svg",
+    relationship_goal: "long_term",
+    prompts: [
+      {
+        key: "A perfect Sunday",
+        answer: "Browsing Champaca bookstore slowly, then sharing hot ramen on 12th Main.",
+      },
+      {
+        key: "My ideal first date",
+        answer: "A 45-minute filter coffee walk in a quiet neighbourhood before deciding on dinner.",
+      },
+    ],
     q1: 4,
     q2: 3,
     q3: 4,
@@ -98,6 +122,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Works at flipkart.com! Hidden from Aarav when Privacy Shield is ON.",
     avatar_url: "/avatars/avatar-6.svg",
+    relationship_goal: "long_term",
+    prompts: [
+      {
+        key: "A city habit I love",
+        answer: "Evening filter coffee stops in Jayanagar right after the rain clears.",
+      },
+      {
+        key: "I'm happiest when",
+        answer: "Playing two hours of doubles badminton without checking Slack once.",
+      },
+    ],
     q1: 4,
     q2: 3,
     q3: 4,
@@ -120,6 +155,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Calm energy, zero drama. Love weekend bouldering, cooking comfort food, and morning cycling.",
     avatar_url: "/avatars/avatar-3.svg",
+    relationship_goal: "open",
+    prompts: [
+      {
+        key: "I'm happiest when",
+        answer: "Cooking Maharashtrian comfort food on Sunday afternoon with zero rush.",
+      },
+      {
+        key: "A small thing I care about",
+        answer: "People who communicate directly instead of leaving vague hints.",
+      },
+    ],
     q1: 4,
     q2: 2,
     q3: 5,
@@ -142,6 +188,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Curious about people and design. Looking for emotional maturity and good coffee conversations.",
     avatar_url: "/avatars/avatar-4.svg",
+    relationship_goal: "long_term",
+    prompts: [
+      {
+        key: "My ideal first date",
+        answer: "Trying a pottery workshop or sketching over masala chai in Indiranagar.",
+      },
+      {
+        key: "Something I'm learning",
+        answer: "Listening better without immediately trying to fix the other person's problem.",
+      },
+    ],
     q1: 3,
     q2: 4,
     q3: 3,
@@ -164,6 +221,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Board game enthusiast and always up for discovering hidden filter coffee spots across Bangalore.",
     avatar_url: "/avatars/avatar-5.svg",
+    relationship_goal: "casual",
+    prompts: [
+      {
+        key: "A city habit I love",
+        answer: "Saturday evening board games at a neighbourhood cafe with friends.",
+      },
+      {
+        key: "A perfect Sunday",
+        answer: "Late breakfast at a south Bengaluru darshini and practicing Carnatic violin.",
+      },
+    ],
     q1: 3,
     q2: 5,
     q3: 3,
@@ -186,6 +254,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Weekend hiker and sci-fi reader based in Hyderabad. Open to exploring Bengaluru.",
     avatar_url: "/avatars/avatar-2.svg",
+    relationship_goal: "marriage",
+    prompts: [
+      {
+        key: "I'm happiest when",
+        answer: "Finishing a 6 AM trail climb before the city wakes up.",
+      },
+      {
+        key: "A small thing I care about",
+        answer: "Honesty about long-term plans early on so nobody wastes each other's time.",
+      },
+    ],
     q1: 5,
     q2: 4,
     q3: 2,
@@ -208,6 +287,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Into filter coffee walks, indie playlists, and weekend badminton doubles in HSR.",
     avatar_url: "/avatars/avatar-4.svg",
+    relationship_goal: "long_term",
+    prompts: [
+      {
+        key: "A perfect Sunday",
+        answer: "Morning badminton in HSR followed by cold brew and a quiet afternoon playlist.",
+      },
+      {
+        key: "My ideal first date",
+        answer: "Walking through Lalbagh early in the morning and grabbing breakfast nearby.",
+      },
+    ],
     q1: 4,
     q2: 3,
     q3: 5,
@@ -230,6 +320,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Amateur chef who makes Thai green curry, plays Tuesday badminton, and values consistency.",
     avatar_url: "/avatars/avatar-5.svg",
+    relationship_goal: "long_term",
+    prompts: [
+      {
+        key: "Something I'm learning",
+        answer: "Making homemade Thai curry pastes from scratch on weekends.",
+      },
+      {
+        key: "A small thing I care about",
+        answer: "Keeping phones face down during dinner conversations.",
+      },
+    ],
     q1: 4,
     q2: 3,
     q3: 4,
@@ -252,6 +353,17 @@ const SEED_USERS: SeedUser[] = [
     bio_prompt:
       "Enjoys acoustic guitar, quiet cafes in Indiranagar, and meaningful 1-on-1 conversations.",
     avatar_url: "/avatars/avatar-3.svg",
+    relationship_goal: "open",
+    prompts: [
+      {
+        key: "A city habit I love",
+        answer: "Finding quiet shaded streets in Indiranagar to walk after 7 PM.",
+      },
+      {
+        key: "I'm happiest when",
+        answer: "Fingerpicking acoustic guitar songs while it rains outside.",
+      },
+    ],
     q1: 3,
     q2: 2,
     q3: 4,
@@ -311,6 +423,8 @@ async function runSeed() {
       hide_same_college: user.hide_same_college,
       bio_prompt: user.bio_prompt,
       avatar_url: user.avatar_url,
+      relationship_goal: user.relationship_goal,
+      prompts: user.prompts,
       q1: user.q1,
       q2: user.q2,
       q3: user.q3,
@@ -357,12 +471,14 @@ async function runSeed() {
           sender_id: anyaId,
           content:
             "Hey Aarav! Loved your prompt about Sunday Cubbon Park runs and filter coffee.",
+          reply_to_prompt_key: "A perfect Sunday",
         },
         {
           match_id: matchId,
           sender_id: aaravId,
           content:
             "Thanks Anya! One more thoughtful message from either of us will unblur our photos.",
+          reply_to_prompt_key: null,
         },
       ]);
       console.log("Seeded shared match & starter messages between Aarav and Anya.");

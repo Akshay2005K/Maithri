@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { supabase, type Profile } from "@/lib/supabase";
+import {
+  supabase,
+  RELATIONSHIP_GOALS,
+  type Profile,
+  type RelationshipGoal,
+} from "@/lib/supabase";
 import type { MatchWithProfile } from "@/lib/matching";
 import AuthForm from "@/components/AuthForm";
 import Onboarding from "@/components/Onboarding";
@@ -126,7 +131,10 @@ export default function HomePage() {
 
   const needsOnboarding = !profile;
   const needsQuiz = profile && !isQuizComplete(profile);
-  const canNavigateMain = Boolean(user && !needsOnboarding && !needsQuiz);
+  const needsGoal = Boolean(profile && !profile.relationship_goal);
+  const canNavigateMain = Boolean(
+    user && !needsOnboarding && !needsQuiz && !needsGoal
+  );
 
   return (
     <>
@@ -281,6 +289,11 @@ export default function HomePage() {
               setEditingStep(null);
             }}
           />
+        ) : needsGoal ? (
+          <MissingGoalPrompt
+            profile={profile}
+            onSaved={(updated) => setProfile(updated)}
+          />
         ) : activeChat ? (
           <Chat
             currentUser={profile}
@@ -351,5 +364,108 @@ export default function HomePage() {
         )}
       </main>
     </>
+  );
+}
+
+function MissingGoalPrompt({
+  profile,
+  onSaved,
+}: {
+  profile: Profile;
+  onSaved: (updated: Profile) => void;
+}) {
+  const [goal, setGoal] = useState<RelationshipGoal | "">("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSaveGoal(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!goal) {
+      setError("Pick a relationship goal above before viewing matches.");
+      return;
+    }
+
+    setSaving(true);
+    const { data, error: dbErr } = await supabase
+      .from("profiles")
+      .update({ relationship_goal: goal })
+      .eq("id", profile.id)
+      .select()
+      .single();
+    setSaving(false);
+
+    if (dbErr) {
+      setError(`${dbErr.message} Please try saving again.`);
+      return;
+    }
+
+    onSaved(data as Profile);
+  }
+
+  return (
+    <section className="mx-auto w-full max-w-[640px]">
+      <form
+        onSubmit={handleSaveGoal}
+        className="space-y-5 rounded-lg border border-dusk/20 bg-fog p-6 sm:p-8"
+      >
+        <div>
+          <h1 className="text-2xl font-bold text-dusk">
+            Pick your relationship goal
+          </h1>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink/85">
+            Before seeing matches, let us know what you are looking for right
+            now. We use this to align daily matches.
+          </p>
+        </div>
+
+        <fieldset className="space-y-2.5">
+          <legend className="text-sm font-medium text-ink">
+            What are you looking for?
+          </legend>
+          <div className="space-y-2">
+            {RELATIONSHIP_GOALS.map((option) => (
+              <label
+                key={option.key}
+                htmlFor={`missing-goal-${option.key}`}
+                className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded border px-3.5 py-2 text-sm ${
+                  goal === option.key
+                    ? "border-dusk bg-dusk font-medium text-fog"
+                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+                }`}
+              >
+                <input
+                  id={`missing-goal-${option.key}`}
+                  type="radio"
+                  name="missing_relationship_goal"
+                  value={option.key}
+                  checked={goal === option.key}
+                  onChange={() => setGoal(option.key)}
+                  className="h-4 w-4 shrink-0 accent-teal"
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded border border-marigold bg-marigold/20 p-3 text-xs font-medium text-ink"
+          >
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="min-h-[44px] w-full rounded bg-dusk px-4 py-2.5 text-sm font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
+        >
+          {saving ? "Saving goal..." : "Save goal and see matches"}
+        </button>
+      </form>
+    </section>
   );
 }
