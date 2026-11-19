@@ -6,6 +6,7 @@ import { supabase, type Profile } from "@/lib/supabase";
 import AuthForm from "@/components/AuthForm";
 import Onboarding from "@/components/Onboarding";
 import Quiz from "@/components/Quiz";
+import Matches from "@/components/Matches";
 
 function isQuizComplete(profile: Profile | null): boolean {
   if (!profile) return false;
@@ -117,67 +118,11 @@ export default function HomePage() {
           }}
         />
       ) : (
-        <div className="space-y-4 rounded-lg border border-emerald-800/60 bg-emerald-950/20 p-6">
-          <div className="flex items-center gap-4">
-            {profile.avatar_url && (
-              <img
-                src={profile.avatar_url}
-                alt="Your avatar"
-                className="h-14 w-14 rounded-xl border border-slate-700"
-              />
-            )}
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                {profile.full_name}, {profile.age}
-              </h2>
-              <p className="text-xs text-slate-300">
-                {profile.role_title || "Grad"} • {profile.city} • Batch{" "}
-                {profile.batch}
-              </p>
-              <p className="mt-0.5 text-[11px] text-amber-300/90">
-                Simulated eLitmus verification (prototype)
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded border border-slate-800 bg-slate-900 p-4 text-xs text-slate-300 space-y-1">
-            <p>
-              <strong>DPDP Consent Recorded At:</strong>{" "}
-              {new Date(profile.dpdp_consent_at).toLocaleString()}
-            </p>
-            <p>
-              <strong>Privacy Shield:</strong> Hide same company (
-              {profile.company_domain || "none"}):{" "}
-              {profile.hide_same_company ? "ON" : "OFF"} | Hide same college (
-              {profile.college_name || "none"}):{" "}
-              {profile.hide_same_college ? "ON" : "OFF"}
-            </p>
-            <p>
-              <strong>Quiz Vector (q1–q5):</strong> [{profile.q1}, {profile.q2},{" "}
-              {profile.q3}, {profile.q4}, {profile.q5}]
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3 pt-1">
-            <button
-              onClick={() => setEditingStep("onboarding")}
-              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-            >
-              Edit Profile &amp; Shield
-            </button>
-            <button
-              onClick={() => setEditingStep("quiz")}
-              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-            >
-              Retake Compatibility Quiz
-            </button>
-          </div>
-
-          <p className="text-xs text-emerald-300">
-            Phase 2 complete! Ready for Phase 3 (Seed users, Privacy Shield
-            filtering, and Today&apos;s 3 Matches).
-          </p>
-        </div>
+        <Matches
+          profile={profile}
+          onEditProfile={() => setEditingStep("onboarding")}
+          onRetakeQuiz={() => setEditingStep("quiz")}
+        />
       )}
     </main>
   );
