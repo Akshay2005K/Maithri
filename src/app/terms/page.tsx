@@ -2,50 +2,79 @@ import Link from "next/link";
 
 export default function TermsPage() {
   return (
-    <main className="mx-auto max-w-2xl space-y-5 p-6 text-sm text-slate-300">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-        <h1 className="text-xl font-bold text-white">Terms of Use</h1>
-        <Link href="/" className="text-xs text-violet-400 hover:underline">
-          &larr; Back to App
-        </Link>
-      </div>
+    <>
+      <header className="border-b border-dusk/15 bg-fog">
+        <div className="mx-auto flex min-h-[64px] w-full max-w-[1100px] items-center justify-between gap-4 px-4 sm:px-6">
+          <Link
+            href="/"
+            className="flex min-h-[44px] flex-col items-start justify-center"
+          >
+            <span className="text-xl font-bold tracking-tight text-dusk">
+              pHavelength
+            </span>
+            <span className="text-xs text-ink/75">
+              Simulated eLitmus verification (prototype)
+            </span>
+          </Link>
+          <Link
+            href="/"
+            className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
+          >
+            Back to home
+          </Link>
+        </div>
+      </header>
 
-      <p className="text-xs text-amber-300/90">
-        Prototype notice: These terms are written in plain language for this
-        assignment prototype. A production launch requires formal legal review.
-      </p>
+      <main className="mx-auto w-full max-w-[1100px] px-4 py-8 text-left sm:px-6">
+        <div className="max-w-[640px] space-y-6">
+          <div className="border-b border-dusk/15 pb-4">
+            <h1 className="text-2xl font-bold text-dusk">Terms of use</h1>
+          </div>
 
-      <section className="space-y-2">
-        <h2 className="font-semibold text-white">1. Eligibility (18+ Only)</h2>
-        <p className="text-xs leading-relaxed">
-          You must be at least 18 years old to create an account or use
-          pHavelength. The 18+ requirement is enforced both in the onboarding
-          form and via a database constraint (<code>age &gt;= 18</code>).
-        </p>
-      </section>
+          <p className="rounded border border-marigold bg-marigold/20 p-3.5 text-xs leading-relaxed text-ink">
+            Prototype notice: These terms are written in plain language for this
+            assignment prototype. A production launch requires formal legal
+            review.
+          </p>
 
-      <section className="space-y-2">
-        <h2 className="font-semibold text-white">
-          2. Simulated Features Disclosure
-        </h2>
-        <p className="text-xs leading-relaxed">
-          All eLitmus batch/verification badges are simulated for this
-          prototype (&quot;Simulated eLitmus verification (prototype)&quot;) and
-          company domains are self-declared. The Plus upgrade modal is a{" "}
-          <strong>mock paywall with no real payment</strong>.
-        </p>
-      </section>
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-dusk">
+              Eligibility (18 and older only)
+            </h2>
+            <p className="font-serif text-sm leading-relaxed text-ink/90">
+              You must be at least 18 years old to create an account or use
+              pHavelength. The 18+ requirement is enforced both in the
+              onboarding form and via a database constraint (
+              <code>age &gt;= 18</code>).
+            </p>
+          </section>
 
-      <section className="space-y-2">
-        <h2 className="font-semibold text-white">
-          3. Respectful Conduct &amp; Reporting
-        </h2>
-        <p className="text-xs leading-relaxed">
-          Harassment, impersonation, or spam is prohibited. Any user can report
-          and block another user directly inside Chat, which immediately removes
-          the match and blocks future matching between those accounts.
-        </p>
-      </section>
-    </main>
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-dusk">
+              Simulated features disclosure
+            </h2>
+            <p className="font-serif text-sm leading-relaxed text-ink/90">
+              All eLitmus batch and verification badges are simulated for this
+              prototype (&ldquo;Simulated eLitmus verification
+              (prototype)&rdquo;) and company domains are self-declared. The
+              Plus upgrade modal is a{" "}
+              <strong>mock paywall, no payment</strong> is collected.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-dusk">
+              Respectful conduct and reporting
+            </h2>
+            <p className="font-serif text-sm leading-relaxed text-ink/90">
+              Harassment, impersonation, or spam is prohibited. Any user can
+              report and block another user directly inside Chat, which
+              immediately removes the match and prevents future matching between
+              those accounts.
+            </p>
+          </section>
+        </div>
+      </main>
+    </>
   );
 }

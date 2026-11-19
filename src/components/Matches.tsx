@@ -8,6 +8,7 @@ import {
 } from "@/lib/matching";
 import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
 import PaywallModal from "@/components/PaywallModal";
+import WavePair from "@/components/WavePair";
 
 interface MatchesProps {
   profile: Profile;
@@ -81,56 +82,49 @@ export default function Matches({
     };
   }, [profile]);
 
-  async function handleResetMockPlus() {
-    const { data } = await supabase
-      .from("profiles")
-      .update({ is_plus_mock: false })
-      .eq("id", profile.id)
-      .select()
-      .single();
-    if (data) onProfileUpdated(data as Profile);
-  }
-
   if (loading) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-300">
+      <div className="border-t border-dusk/15 py-8 text-left text-sm text-ink/80">
         Computing today&apos;s compatibility matches...
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
-      {/* Top Status & Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <section className="space-y-6">
+      {/* Page Header & Controls */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dusk/15 pb-5">
         <div>
-          <h2 className="text-base font-semibold text-white">
-            Today&apos;s Curated Matches ({todaysMatches.length}/
+          <h1 className="text-2xl font-bold text-dusk">
+            Today&apos;s curated matches ({todaysMatches.length}/
             {profile.is_plus_mock ? 4 : 3})
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            No swipe deck. Generated on open from your 5-question quiz and city
-            ({profile.city}).
+          </h1>
+          <p className="mt-1 text-sm text-ink/80">
+            Generated on open from your compatibility quiz and city (
+            {profile.city}).
           </p>
         </div>
+
         <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={onEditProfile}
-            className="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
           >
-            Edit Profile / Shield
+            Edit profile and shield
           </button>
           <button
+            type="button"
             onClick={onRetakeQuiz}
-            className="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
           >
-            Retake Quiz
+            Retake quiz
           </button>
         </div>
       </div>
 
-      {/* Privacy Shield Counter */}
-      <div className="rounded-lg border border-violet-800/50 bg-violet-950/30 px-4 py-3 text-xs text-violet-200">
+      {/* Privacy Shield Status */}
+      <div className="rounded-lg border border-teal/40 bg-teal/10 px-4 py-3 text-sm text-ink">
         <strong>Privacy Shield:</strong> {hiddenCount}{" "}
         {hiddenCount === 1 ? "profile" : "profiles"} hidden by your Privacy
         Shield
@@ -144,37 +138,44 @@ export default function Matches({
       </div>
 
       {profile.is_plus_mock && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-800/50 bg-amber-950/20 px-4 py-2.5 text-xs text-amber-200">
-          <span>
-            <strong>Mock Plus Active:</strong> 4th daily match slot unlocked
-            (no payment).
-          </span>
-          <button
-            type="button"
-            onClick={handleResetMockPlus}
-            className="text-[11px] text-amber-300 underline hover:text-white"
-          >
-            Reset to Free
-          </button>
+        <div className="rounded-lg border border-marigold bg-marigold/20 px-4 py-2.5 text-sm text-ink">
+          <strong>Mock Plus active:</strong> fourth daily match slot unlocked
+          (no payment).
         </div>
       )}
 
       {error && (
-        <p className="rounded border border-red-800 bg-red-950/40 p-3 text-xs text-red-300">
-          {error}
+        <p
+          role="alert"
+          className="rounded border border-marigold bg-marigold/20 p-4 text-sm text-ink"
+        >
+          {error} Refresh the page to try loading your matches again.
         </p>
       )}
 
-      {/* Match Cards */}
+      {/* Full-width vertical list of matches */}
       {todaysMatches.length === 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-400">
-          No eligible matches found right now in {profile.city} or nearby
-          cities.
+        <div className="rounded-lg border border-dusk/20 bg-dusk/5 p-6 text-left">
+          <p className="text-sm text-ink">
+            No eligible matches found right now in {profile.city} or nearby
+            cities.
+          </p>
+          <p className="mt-1 text-sm text-ink/80">
+            Update your looking-for preferences, city, or Privacy Shield
+            settings to expand today&apos;s pool.
+          </p>
+          <button
+            type="button"
+            onClick={onEditProfile}
+            className="mt-4 inline-flex min-h-[44px] items-center rounded bg-dusk px-4 text-sm font-medium text-fog hover:bg-dusk/90"
+          >
+            Update profile preferences
+          </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="divide-y divide-dusk/15 border-y border-dusk/15">
           {todaysMatches.map((item) => (
-            <MatchCard
+            <MatchRow
               key={item.matchId}
               item={item}
               unblur={unblurByMatch[item.matchId]}
@@ -186,40 +187,46 @@ export default function Matches({
 
       {/* Earlier Active Matches */}
       {earlierMatches.length > 0 && (
-        <div className="space-y-3 pt-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Previous Active Matches
-          </h3>
-          {earlierMatches.map((item) => (
-            <MatchCard
-              key={item.matchId}
-              item={item}
-              unblur={unblurByMatch[item.matchId]}
-              onOpenChat={() => onOpenChat(item)}
-            />
-          ))}
+        <div className="space-y-3 pt-4">
+          <h2 className="text-lg font-semibold text-dusk">
+            Previous active matches
+          </h2>
+          <div className="divide-y divide-dusk/15 border-y border-dusk/15">
+            {earlierMatches.map((item) => (
+              <MatchRow
+                key={item.matchId}
+                item={item}
+                unblur={unblurByMatch[item.matchId]}
+                onOpenChat={() => onOpenChat(item)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
       {/* 4th Match Mock Paywall Trigger */}
       {!profile.is_plus_mock && todaysMatches.length >= 3 && (
-        <div className="rounded-lg border border-dashed border-violet-700/70 bg-slate-900/70 p-4 text-center">
-          <p className="text-xs text-slate-200">
-            Daily limit reached (3/3 free matches).{" "}
-            {hasMore
-              ? "A 4th compatible match is available today."
-              : "Upgrade unlocks up to 4 matches/day."}
-          </p>
+        <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-marigold bg-marigold/15 p-5 sm:flex-row sm:items-center">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-dusk">
+              Daily limit reached (3/3 free matches)
+            </p>
+            <p className="text-sm text-ink/85">
+              {hasMore
+                ? "A fourth compatible match is available today."
+                : "Unlocking Plus raises your daily cap to 4 matches."}
+            </p>
+            <p className="text-xs font-medium text-ink/75">
+              Mock paywall, no payment
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => setShowPaywall(true)}
-            className="mt-2.5 rounded bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+            className="inline-flex min-h-[44px] shrink-0 items-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
           >
-            Unlock 4th Daily Match (Mock Paywall)
+            Unlock 4th daily match
           </button>
-          <p className="mt-1.5 text-[11px] text-amber-300/80">
-            Mock paywall, no payment
-          </p>
         </div>
       )}
 
@@ -233,11 +240,11 @@ export default function Matches({
           }}
         />
       )}
-    </div>
+    </section>
   );
 }
 
-function MatchCard({
+function MatchRow({
   item,
   unblur,
   onOpenChat,
@@ -251,58 +258,60 @@ function MatchCard({
   const level = unblur?.level ?? 1;
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 p-5">
-      <div className="flex items-start gap-4">
-        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
+    <article className="flex flex-col gap-5 py-6 md:flex-row md:items-center md:justify-between">
+      {/* Left: Avatar + Identity + Bio */}
+      <div className="flex min-w-0 flex-1 items-start gap-4">
+        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-dusk/25 bg-dusk/10">
           <img
             src={partner.avatar_url || "/avatars/avatar-1.svg"}
-            alt="Match placeholder avatar"
-            className={`h-full w-full object-cover transition-all ${blurClass}`}
+            alt={`${partner.full_name} placeholder avatar`}
+            className={`h-full w-full object-cover ${blurClass}`}
           />
           {level < 3 && (
-            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-white/90">
-              Lvl {level}
+            <span className="absolute inset-0 flex items-center justify-center bg-dusk/30 text-xs font-semibold text-fog">
+              Level {level}
             </span>
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-white">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h3 className="text-lg font-semibold text-dusk">
               {partner.full_name}, {partner.age}
             </h3>
-            <span className="rounded-full border border-emerald-800/60 bg-emerald-950 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
-              {compatibilityScore}% Match
+            <span className="text-sm text-ink/80">
+              {partner.role_title || "Early-career graduate"} • {partner.city}{" "}
+              • Batch {partner.batch}
             </span>
           </div>
 
-          <p className="mt-0.5 text-xs text-slate-300">
-            {partner.role_title || "Early-career grad"} • {partner.city} • Batch{" "}
-            {partner.batch}
-          </p>
-
-          <p className="mt-1 inline-block rounded border border-amber-800/40 bg-amber-950/50 px-2 py-0.5 text-[11px] text-amber-300">
+          <p className="inline-block rounded border border-marigold bg-marigold/20 px-2 py-0.5 text-xs font-medium text-ink">
             Simulated eLitmus verification (prototype)
           </p>
 
           {partner.bio_prompt && (
-            <p className="mt-3 text-xs leading-relaxed text-slate-300">
+            <p className="pt-1 font-serif text-sm leading-relaxed text-ink/90">
               &ldquo;{partner.bio_prompt}&rdquo;
             </p>
           )}
+
+          <p className="text-xs text-ink/70">
+            {unblur?.label ?? "Level 1 (Blurred)"}
+          </p>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3 text-xs text-slate-400">
-        <span>{unblur?.label ?? "Level 1 (Blurred)"}</span>
+      {/* Right: WavePair + Open chat action */}
+      <div className="flex flex-wrap items-center justify-between gap-4 md:shrink-0 md:flex-col md:items-end">
+        <WavePair score={compatibilityScore} />
         <button
           type="button"
           onClick={onOpenChat}
-          className="rounded bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+          className="inline-flex min-h-[44px] items-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
         >
-          Open Chat
+          Open chat
         </button>
       </div>
-    </div>
+    </article>
   );
 }

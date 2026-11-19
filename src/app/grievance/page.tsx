@@ -2,47 +2,73 @@ import Link from "next/link";
 
 export default function GrievancePage() {
   return (
-    <main className="mx-auto max-w-2xl space-y-5 p-6 text-sm text-slate-300">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-        <h1 className="text-xl font-bold text-white">
-          Grievance &amp; Safety Contact
-        </h1>
-        <Link href="/" className="text-xs text-violet-400 hover:underline">
-          &larr; Back to App
-        </Link>
-      </div>
+    <>
+      <header className="border-b border-dusk/15 bg-fog">
+        <div className="mx-auto flex min-h-[64px] w-full max-w-[1100px] items-center justify-between gap-4 px-4 sm:px-6">
+          <Link
+            href="/"
+            className="flex min-h-[44px] flex-col items-start justify-center"
+          >
+            <span className="text-xl font-bold tracking-tight text-dusk">
+              pHavelength
+            </span>
+            <span className="text-xs text-ink/75">
+              Simulated eLitmus verification (prototype)
+            </span>
+          </Link>
+          <Link
+            href="/"
+            className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
+          >
+            Back to home
+          </Link>
+        </div>
+      </header>
 
-      <section className="space-y-2 rounded-lg border border-slate-800 bg-slate-900 p-5 text-xs leading-relaxed">
-        <p>
-          <strong>Grievance Officer (Prototype Placeholder):</strong> Akshay
-          Kumar K
-        </p>
-        <p>
-          <strong>Contact Email:</strong>{" "}
-          <code>grievance@phavelength-prototype.example</code>
-        </p>
-        <p>
-          <strong>Acknowledgment Target (Production Policy):</strong> Within 24
-          hours of receiving a safety, privacy, or data deletion grievance.
-        </p>
-      </section>
+      <main className="mx-auto w-full max-w-[1100px] px-4 py-8 text-left sm:px-6">
+        <div className="max-w-[640px] space-y-6">
+          <div className="border-b border-dusk/15 pb-4">
+            <h1 className="text-2xl font-bold text-dusk">
+              Grievance and safety contact
+            </h1>
+          </div>
 
-      <section className="space-y-2 text-xs leading-relaxed">
-        <h2 className="font-semibold text-white">Immediate In-App Actions</h2>
-        <ul className="list-disc space-y-1 pl-5">
-          <li>
-            <strong>Safety or Harassment:</strong> Use the{" "}
-            <strong>Report / Block</strong> button inside any Chat to
-            immediately remove the match and prevent future contact.
-          </li>
-          <li>
-            <strong>Data Deletion:</strong> Use the{" "}
-            <strong>Delete My Account</strong> button in the app footer when
-            logged in to erase your auth user, profile, matches, messages, and
-            reports immediately.
-          </li>
-        </ul>
-      </section>
-    </main>
+          <section className="space-y-2 rounded-lg border border-dusk/20 bg-dusk/5 p-5 text-sm leading-relaxed text-ink">
+            <p>
+              <strong>Grievance officer (prototype placeholder):</strong> Akshay
+              Kumar K
+            </p>
+            <p>
+              <strong>Contact email:</strong>{" "}
+              <code>grievance@phavelength-prototype.example</code>
+            </p>
+            <p>
+              <strong>Acknowledgment target (production policy):</strong>{" "}
+              Within 24 hours of receiving a safety, privacy, or data deletion
+              grievance.
+            </p>
+          </section>
+
+          <section className="space-y-2.5">
+            <h2 className="text-lg font-semibold text-dusk">
+              Immediate website actions
+            </h2>
+            <ul className="list-disc space-y-2 pl-5 font-serif text-sm leading-relaxed text-ink/90">
+              <li>
+                <strong>Safety or harassment:</strong> Use{" "}
+                <strong>Report and block</strong> inside any Chat to immediately
+                remove the match and prevent future contact.
+              </li>
+              <li>
+                <strong>Data deletion:</strong> Use{" "}
+                <strong>Delete my account</strong> at the bottom of the home
+                page when signed in to erase your auth user, profile, matches,
+                messages, and reports immediately.
+              </li>
+            </ul>
+          </section>
+        </div>
+      </main>
+    </>
   );
 }

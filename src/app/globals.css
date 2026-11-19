@@ -2,7 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-dusk: #2B2A5C;
+  --color-fog: #EEF0F6;
+  --color-ink: #1B1B2F;
+  --color-teal: #1F9E9A;
+  --color-marigold: #F2A93B;
+}
+
 body {
-  background-color: #020617;
-  color: #f8fafc;
+  background-color: var(--color-fog);
+  color: var(--color-ink);
+}
+
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-teal);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

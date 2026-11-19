@@ -6,38 +6,38 @@ import { supabase, type Profile } from "@/lib/supabase";
 const QUESTIONS = [
   {
     key: "q1" as const,
-    title: "1. Work-Life Rhythm",
-    prompt: "How do you balance career ambition vs personal downtime?",
-    low: "1 — Strict 9-to-6 boundaries",
-    high: "5 — High-growth startup hustle",
+    title: "Work-life rhythm",
+    prompt: "How do you balance career ambition with personal downtime?",
+    low: "Strict 9-to-6 boundaries",
+    high: "High-growth startup pace",
   },
   {
     key: "q2" as const,
-    title: "2. Weekend Social Battery",
+    title: "Weekend social battery",
     prompt: "How do you prefer to recharge on Saturday and Sunday?",
-    low: "1 — Quiet reading, rest & home cooking",
-    high: "5 — Outings, events & social plans",
+    low: "Quiet reading, rest, and home cooking",
+    high: "Outings, events, and social plans",
   },
   {
     key: "q3" as const,
-    title: "3. Financial Style",
-    prompt: "How do you approach spending vs saving in your 20s?",
-    low: "1 — Spend freely on experiences now",
-    high: "5 — Disciplined saving & SIPs first",
+    title: "Financial style",
+    prompt: "How do you approach spending versus saving in your twenties?",
+    low: "Spend freely on experiences now",
+    high: "Disciplined saving and investing first",
   },
   {
     key: "q4" as const,
-    title: "4. Conflict Resolution",
+    title: "Conflict resolution",
     prompt: "When a disagreement happens, what feels healthiest to you?",
-    low: "1 — Take quiet space before talking",
-    high: "5 — Discuss directly right away",
+    low: "Take quiet space before talking",
+    high: "Discuss directly right away",
   },
   {
     key: "q5" as const,
-    title: "5. City & Future Flexibility",
-    prompt: "How open are you to relocating cities over the next 3–5 years?",
-    low: "1 — Want to stay settled in my city",
-    high: "5 — Open to moving cities / abroad",
+    title: "City and future flexibility",
+    prompt: "How open are you to relocating cities over the next few years?",
+    low: "Prefer staying settled in my city",
+    high: "Open to moving cities or abroad",
   },
 ];
 
@@ -72,7 +72,7 @@ export default function Quiz({ profile, onComplete }: QuizProps) {
     setSaving(false);
 
     if (dbError) {
-      setError(dbError.message);
+      setError(`${dbError.message} Please try saving your answers again.`);
       return;
     }
 
@@ -80,65 +80,78 @@ export default function Quiz({ profile, onComplete }: QuizProps) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-5 rounded-lg border border-slate-800 bg-slate-900 p-6"
-    >
-      <div>
-        <h2 className="text-lg font-semibold text-white">
-          5-Question Compatibility Quiz
-        </h2>
-        <p className="mt-1 text-xs text-slate-400">
-          Rate each statement from 1 to 5. We compute your daily compatibility
-          score from the difference across these five answers.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {QUESTIONS.map((q) => (
-          <div
-            key={q.key}
-            className="rounded border border-slate-800 bg-slate-950 p-4"
-          >
-            <p className="text-sm font-medium text-white">{q.title}</p>
-            <p className="mt-0.5 text-xs text-slate-300">{q.prompt}</p>
-
-            <div className="mt-3 flex items-center justify-between gap-2">
-              {[1, 2, 3, 4, 5].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() =>
-                    setAnswers((prev) => ({ ...prev, [q.key]: num }))
-                  }
-                  className={`flex-1 rounded border py-1.5 text-sm font-medium transition ${
-                    answers[q.key] === num
-                      ? "border-violet-500 bg-violet-600 text-white"
-                      : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-2 flex justify-between text-[11px] text-slate-400">
-              <span>{q.low}</span>
-              <span>{q.high}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {error && <p className="text-xs text-red-400">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={saving}
-        className="w-full rounded bg-violet-600 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+    <section className="mx-auto w-full max-w-[640px]">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-6 rounded-lg border border-dusk/20 bg-fog p-6 sm:p-8"
       >
-        {saving ? "Saving Quiz..." : "Save Compatibility Answers"}
-      </button>
-    </form>
+        <div>
+          <h1 className="text-2xl font-bold text-dusk">
+            Compatibility quiz
+          </h1>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink/85">
+            Rate each topic from 1 to 5. Daily compatibility is calculated from
+            how close your answers are across these five areas.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          {QUESTIONS.map((q) => (
+            <fieldset
+              key={q.key}
+              className="rounded-lg border border-dusk/15 bg-dusk/5 p-4 sm:p-5"
+            >
+              <legend className="text-base font-semibold text-dusk">
+                {q.title}
+              </legend>
+              <p className="mt-1 font-serif text-sm text-ink/90">{q.prompt}</p>
+
+              <div className="mt-3 flex items-center justify-between gap-2">
+                {[1, 2, 3, 4, 5].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    aria-label={`${q.title}: rate ${num} out of 5`}
+                    aria-pressed={answers[q.key] === num}
+                    onClick={() =>
+                      setAnswers((prev) => ({ ...prev, [q.key]: num }))
+                    }
+                    className={`min-h-[44px] flex-1 rounded border text-sm font-semibold ${
+                      answers[q.key] === num
+                        ? "border-dusk bg-dusk text-fog"
+                        : "border-dusk/25 bg-fog text-ink hover:bg-teal/15"
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-2.5 flex justify-between gap-4 text-xs text-ink/75">
+                <span>{q.low}</span>
+                <span className="text-right">{q.high}</span>
+              </div>
+            </fieldset>
+          ))}
+        </div>
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded border border-marigold bg-marigold/20 p-3 text-xs font-medium text-ink"
+          >
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="min-h-[44px] w-full rounded bg-dusk px-4 py-2.5 text-sm font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
+        >
+          {saving ? "Saving answers..." : "Save compatibility answers"}
+        </button>
+      </form>
+    </section>
   );
 }
