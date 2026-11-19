@@ -159,37 +159,33 @@ export default function HomePage() {
             </button>
 
             {user && (
-              <div className="flex items-center gap-2">
-                {canNavigateMain && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowProfileView(false);
-                      setActiveChat(null);
-                      setMenuOpen(false);
-                    }}
-                    className={`inline-flex min-h-[44px] items-center rounded px-3.5 text-sm font-medium ${
-                      !showProfileView && activeChat === null
-                        ? "bg-dusk text-fog"
-                        : "text-ink hover:bg-dusk/10"
-                    }`}
-                  >
-                    Matches
-                  </button>
-                )}
-
+              <div className="flex items-center">
                 <button
                   type="button"
+                  aria-label={menuOpen ? "Close menu" : "Open menu"}
                   aria-expanded={menuOpen}
                   aria-controls="user-menu-dropdown"
                   onClick={() => setMenuOpen((prev) => !prev)}
-                  className={`inline-flex min-h-[44px] items-center rounded border px-3.5 text-sm font-medium ${
+                  className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded border px-3 ${
                     menuOpen || showProfileView
                       ? "border-dusk bg-dusk text-fog"
                       : "border-dusk/25 bg-fog text-dusk hover:bg-dusk/10"
                   }`}
                 >
-                  {menuOpen ? "Close" : "Menu"}
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.25"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="4" y1="6" x2="20" y2="6" />
+                    <line x1="4" y1="12" x2="20" y2="12" />
+                    <line x1="4" y1="18" x2="20" y2="18" />
+                  </svg>
                 </button>
               </div>
             )}
@@ -198,8 +194,16 @@ export default function HomePage() {
           {user && menuOpen && (
             <div
               id="user-menu-dropdown"
-              className="flex flex-col gap-1 border-t border-dusk/15 py-3 sm:absolute sm:right-6 sm:top-[64px] sm:z-40 sm:w-56 sm:rounded-b-lg sm:border sm:border-dusk/20 sm:bg-fog sm:p-2"
+              className="flex flex-col gap-1 border-t border-dusk/15 py-3 sm:absolute sm:right-6 sm:top-[64px] sm:z-40 sm:w-64 sm:rounded-b-lg sm:border sm:border-dusk/20 sm:bg-fog sm:p-2"
             >
+              <div className="mb-1 border-b border-dusk/15 px-3 pb-2 text-left">
+                {profile?.full_name && (
+                  <p className="truncate text-sm font-semibold text-dusk">
+                    {profile.full_name}
+                  </p>
+                )}
+                <p className="truncate text-xs text-ink/75">{user.email}</p>
+              </div>
               {canNavigateMain && (
                 <button
                   type="button"
@@ -254,6 +258,7 @@ export default function HomePage() {
         ) : showProfileView ? (
           <ProfileSettings
             profile={profile}
+            userEmail={user.email ?? ""}
             onSaved={(updated) => {
               setProfile(updated);
               setShowProfileView(false);

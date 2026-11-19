@@ -59,6 +59,7 @@ const QUIZ_QUESTIONS = [
 
 interface ProfileSettingsProps {
   profile: Profile;
+  userEmail: string;
   onSaved: (updated: Profile) => void;
   onCancel: () => void;
   onDeleteAccount: () => Promise<void>;
@@ -68,6 +69,7 @@ interface ProfileSettingsProps {
 
 export default function ProfileSettings({
   profile,
+  userEmail,
   onSaved,
   onCancel,
   onDeleteAccount,
@@ -208,7 +210,10 @@ export default function ProfileSettings({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dusk/15 pb-4">
         <div>
           <h1 className="text-2xl font-bold text-dusk">Profile settings</h1>
-          <p className="mt-1 text-xs text-ink/75">
+          <p className="mt-1 text-sm font-medium text-ink">
+            Signed in as <strong>{profile.full_name}</strong> ({userEmail})
+          </p>
+          <p className="mt-0.5 text-xs text-ink/75">
             Simulated eLitmus verification (prototype)
           </p>
         </div>
