@@ -54,14 +54,14 @@ export default function WavePair({
         <path
           d={tealPath}
           fill="none"
-          stroke="#1F9E9A"
+          stroke="var(--color-teal)"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
         <path
           d={marigoldPath}
           fill="none"
-          stroke="#F2A93B"
+          stroke="var(--color-marigold)"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />

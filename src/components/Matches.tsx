@@ -6,6 +6,10 @@ import {
   getRelationshipGoalLabel,
   type Profile,
 } from "@/lib/supabase";
+import {
+  getDisplayedAge,
+  getProfileDetailChips,
+} from "@/lib/profileOptions";
 import type { MatchWithProfile } from "@/lib/matching";
 import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
 import PaywallModal from "@/components/PaywallModal";
@@ -254,6 +258,7 @@ function MatchRow({
   const { partner, compatibilityScore } = item;
   const blurClass = unblur?.blurClass ?? "blur-xl";
   const level = unblur?.level ?? 1;
+  const detailChips = getProfileDetailChips(partner.details);
 
   return (
     <article className="flex flex-col gap-5 py-6 md:flex-row md:items-center md:justify-between">
@@ -266,7 +271,7 @@ function MatchRow({
             className={`h-full w-full object-cover ${blurClass}`}
           />
           {level < 3 && (
-            <span className="absolute inset-0 flex items-center justify-center bg-dusk/30 text-xs font-semibold text-fog">
+            <span className="absolute inset-0 flex items-center justify-center bg-[#12122B]/65 text-xs font-semibold text-[#EEF0F6]">
               Level {level}
             </span>
           )}
@@ -275,7 +280,7 @@ function MatchRow({
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h3 className="text-lg font-semibold text-dusk">
-              {partner.full_name}, {partner.age}
+              {partner.full_name}, {getDisplayedAge(partner)}
             </h3>
             <span className="text-sm text-ink/80">
               {partner.role_title || "Early-career graduate"} • {partner.city}{" "}
@@ -298,6 +303,22 @@ function MatchRow({
             <p className="pt-1 font-serif text-sm leading-relaxed text-ink/90">
               &ldquo;{partner.bio_prompt}&rdquo;
             </p>
+          )}
+
+          {detailChips.length > 0 && (
+            <div
+              aria-label="Profile details and interests"
+              className="flex flex-wrap gap-1.5 pt-1"
+            >
+              {detailChips.map((chip) => (
+                <span
+                  key={chip.key}
+                  className="inline-block rounded-full border border-dusk/25 bg-dusk/5 px-2.5 py-0.5 text-xs font-medium text-ink"
+                >
+                  {chip.label}
+                </span>
+              ))}
+            </div>
           )}
 
           {Array.isArray(partner.prompts) && partner.prompts.length > 0 && (

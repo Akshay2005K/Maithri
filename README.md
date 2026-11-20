@@ -136,11 +136,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 ## 5. Known Prototype Limitations (Stated Honestly)
 
-1. **Profile column exposure:** The `profiles` `SELECT` RLS policy lets logged-in users read profile rows (including `q1`–`q5` and `company_domain`) for client-side scoring. Production would run matching in a server function/view returning only safe display fields.
-2. **CSS-only blur:** Photo blur (`blur-xl` / `blur-md` / `blur-none`) hides the avatar visually in CSS while the SVG URL remains in the DOM. Production would store pre-blurred assets and swap image URLs server-side upon unblur.
-3. **One-sided block visibility:** Because `reports_blocks` RLS restricts `SELECT` to `auth.uid() = reporter_id` (preventing users from probing who blocked them), blocking hides the match immediately for the reporter, whereas a production system would use a server trigger/function to also remove the match from the reported user's view.
-4. **Self-declared workplace/batch:** Company domains and eLitmus batches are self-declared; no live eLitmus API or corporate email OTP is integrated.
-5. **Unilateral daily match insertion:** A match created for `today` by User A creates a `(user_a, user_b)` row in `matches`, which counts toward User A's daily rows and appears in User B's matches via RLS (`auth.uid() in (user_a, user_b)`).
+1. **Optional `details` and profile column visibility:** Optional profile details (`profiles.details`, including interests, languages, open to, zodiac, education, communication style, love style, pets, drinking, smoking, and workout) are displayed as read-only chips to matched users and are visible to logged-in users under the `profiles` read policy.
+2. **Stored `age` column can go stale:** The database retains the integer `age` column (`check (age >= 18)`), which is computed from `birth_date` whenever a user saves their profile. While the UI dynamically derives displayed age from `birth_date`, the stored `age` integer in Postgres is not automatically incremented on a user's birthday until their profile is next saved.
+3. **Illustration avatars instead of photos (and CSS-only blur):** All profiles use local SVG illustration avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`) instead of real user photo uploads. Photo blur (`blur-xl` / `blur-md` / `blur-none`) is applied visually in CSS while the SVG URL remains in the DOM; a production system with real photos would store pre-blurred assets and serve signed URLs on the server.
+4. **Self-declared workplace, college, and batch:** Company domains, college names, role titles, and eLitmus batches are self-declared; no live eLitmus candidate database API or corporate email verification is integrated.
+5. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are unguessable 128-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
+6. **Mock paywall & no formal legal review:** The 4th daily match unlock is a mock toggle with no real payment processor, and the DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
 
 ---
 
@@ -153,8 +154,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Under **Authentication → Sign In / Up → Email**, turn **Confirm email** OFF.
-   - Run `supabase/schema.sql` and then `supabase/policies.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, and `supabase/migrations_profile_settings.sql` in **SQL Editor**.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:
@@ -165,7 +165,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    ```
    *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY` in client code.)*
 
-4. **Seed the 10 demo users (requires Node 22+):**
+4. **Seed the 16 demo users (requires Node 22+):**
    ```bash
    node --experimental-strip-types --env-file=.env.local scripts/seed.ts
    ```
@@ -182,13 +182,15 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 Shared password for all seeded accounts: `elitmus2026`
 
-- **Demo 1 (Male, Bengaluru, `flipkart.com`):** `aarav@elitmus-demo.in`
-- **Demo 2 (Female, Bengaluru, `razorpay.com`):** `anya@elitmus-demo.in` *(shares a pre-seeded Level-2 match and 2 starter messages with Aarav)*
-- **Privacy Shield Test (Female, Bengaluru, `flipkart.com`):** `divya@elitmus-demo.in` *(hidden from Aarav when Privacy Shield is ON)*
-- **Additional seeded candidates:** `kriti@elitmus-demo.in`, `meera@elitmus-demo.in`, `priya@elitmus-demo.in`, `sneha@elitmus-demo.in`, `neha@elitmus-demo.in`, `rohan@elitmus-demo.in`, `vikram@elitmus-demo.in`
+- **Demo 1 (Man, looking for women, Bengaluru, `flipkart.com`):** `aarav@elitmus-demo.in`
+- **Demo 2 (Woman, looking for men, Bengaluru, `razorpay.com`):** `anya@elitmus-demo.in` *(shares a pre-seeded Level-2 match and 2 starter messages with Aarav)*
+- **Beyond binary / Everyone filter test (Beyond binary, looking for everyone, Bengaluru):** `arjun@elitmus-demo.in`
+- **Privacy Shield Test (Woman, Bengaluru, `flipkart.com`):** `divya@elitmus-demo.in` *(hidden from Aarav when Privacy Shield is ON)*
+- **Additional seeded candidates:** `kriti@elitmus-demo.in`, `meera@elitmus-demo.in`, `priya@elitmus-demo.in`, `sneha@elitmus-demo.in`, `neha@elitmus-demo.in`, `tara@elitmus-demo.in`, `riya@elitmus-demo.in`, `rohan@elitmus-demo.in`, `vikram@elitmus-demo.in`, `dev@elitmus-demo.in`, `kabir@elitmus-demo.in`, `siddharth@elitmus-demo.in`
 
 ---
 
 ## 8. Disclosures
 
 - **Libraries & services used:** Next.js, React, TypeScript, Tailwind CSS, `@supabase/supabase-js`, Supabase (Auth + PostgreSQL), Vercel.
+- **Design & layout disclosure:** The two-column onboarding and edit-profile layout (with an `"Optional"` divider, pill/row option pickers, and a centered primary action button) is inspired by common dating-app onboarding patterns. All copy, color tokens (`Dusk`, `Fog`, `Ink`, `Teal`, `Marigold`), typography (`Bricolage Grotesque` and `Literata`), and SVG illustrations are original to pHavelength.

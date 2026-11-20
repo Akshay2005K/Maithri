@@ -3,12 +3,21 @@
 import { useState } from "react";
 import {
   supabase,
-  RELATIONSHIP_GOALS,
   PROMPT_KEYS,
   type Profile,
   type ProfilePrompt,
   type RelationshipGoal,
 } from "@/lib/supabase";
+import {
+  GENDER_OPTIONS,
+  INTERESTED_IN_OPTIONS,
+  INTEREST_OPTIONS,
+  RELATIONSHIP_GOAL_OPTIONS,
+  parseBirthDateToParts,
+  validateBirthDateParts,
+  type ProfileDetails,
+} from "@/lib/profileOptions";
+import PillPicker from "./PillPicker";
 
 const AVATAR_OPTIONS = [
   "/avatars/avatar-1.svg",
@@ -21,25 +30,49 @@ const AVATAR_OPTIONS = [
 
 interface OnboardingProps {
   userId: string;
+  userEmail?: string;
   existingProfile: Profile | null;
+  houseRulesAcceptedAt?: string | null;
   onComplete: (savedProfile: Profile) => void;
+  onSignOut?: () => void;
 }
 
 export default function Onboarding({
   userId,
+  userEmail = "",
   existingProfile,
+  houseRulesAcceptedAt,
   onComplete,
+  onSignOut,
 }: OnboardingProps) {
+  const initialBirthParts = parseBirthDateToParts(
+    existingProfile?.birth_date,
+    existingProfile?.age ?? null
+  );
+
   const [fullName, setFullName] = useState(existingProfile?.full_name ?? "");
-  const [age, setAge] = useState(existingProfile?.age ?? 24);
+  const [birthDay, setBirthDay] = useState(initialBirthParts.day);
+  const [birthMonth, setBirthMonth] = useState(initialBirthParts.month);
+  const [birthYear, setBirthYear] = useState(initialBirthParts.year);
   const [isOver18Confirmed, setIsOver18Confirmed] = useState(
     Boolean(existingProfile && existingProfile.age >= 18)
   );
-  const [gender, setGender] = useState(existingProfile?.gender ?? "M");
-  const [lookingFor, setLookingFor] = useState(
-    existingProfile?.looking_for ?? "F"
+  const [gender, setGender] = useState<string | null>(
+    existingProfile?.gender ?? null
   );
+  const [lookingFor, setLookingFor] = useState<string>(
+    existingProfile?.looking_for ?? "everyone"
+  );
+  const [relationshipGoal, setRelationshipGoal] = useState<
+    RelationshipGoal | ""
+  >(existingProfile?.relationship_goal ?? "");
+
+  const [avatarUrl, setAvatarUrl] = useState(
+    existingProfile?.avatar_url ?? AVATAR_OPTIONS[0]
+  );
+
   const [city, setCity] = useState(existingProfile?.city ?? "Bengaluru");
+  const [batch, setBatch] = useState(existingProfile?.batch ?? 2022);
   const [roleTitle, setRoleTitle] = useState(
     existingProfile?.role_title ?? ""
   );
@@ -49,7 +82,6 @@ export default function Onboarding({
   const [collegeName, setCollegeName] = useState(
     existingProfile?.college_name ?? ""
   );
-  const [batch, setBatch] = useState(existingProfile?.batch ?? 2022);
   const [hideSameCompany, setHideSameCompany] = useState(
     existingProfile?.hide_same_company ?? true
   );
@@ -59,12 +91,7 @@ export default function Onboarding({
   const [bioPrompt, setBioPrompt] = useState(
     existingProfile?.bio_prompt ?? ""
   );
-  const [avatarUrl, setAvatarUrl] = useState(
-    existingProfile?.avatar_url ?? AVATAR_OPTIONS[0]
-  );
-  const [relationshipGoal, setRelationshipGoal] = useState<
-    RelationshipGoal | ""
-  >(existingProfile?.relationship_goal ?? "");
+
   const [prompts, setPrompts] = useState<ProfilePrompt[]>(() => {
     const existing = Array.isArray(existingProfile?.prompts)
       ? existingProfile.prompts
@@ -80,6 +107,13 @@ export default function Onboarding({
       { key: PROMPT_KEYS[1], answer: "" },
     ];
   });
+
+  const [interests, setInterests] = useState<string[]>(() =>
+    Array.isArray(existingProfile?.details?.interests)
+      ? existingProfile.details.interests
+      : []
+  );
+
   const [dpdpConsent, setDpdpConsent] = useState(
     Boolean(existingProfile?.dpdp_consent_at)
   );
@@ -90,15 +124,35 @@ export default function Onboarding({
     e.preventDefault();
     setError(null);
 
-    // Required relationship goal
-    if (!relationshipGoal) {
+    if (!fullName.trim()) {
+      setError("Enter your first name before continuing.");
+      return;
+    }
+
+    const birthCheck = validateBirthDateParts(birthDay, birthMonth, birthYear);
+    if (!birthCheck.valid || !birthCheck.iso || !birthCheck.age) {
       setError(
-        "Select your relationship goal above before saving your profile."
+        birthCheck.error ??
+          "Enter a valid birthday (DD, MM, YYYY). You must be 18 or older."
       );
       return;
     }
 
-    // Validate 2 to 3 profile prompts (10-200 characters, unique keys)
+    if (!gender) {
+      setError("Select your gender before continuing.");
+      return;
+    }
+
+    if (!lookingFor) {
+      setError("Select who you are interested in meeting.");
+      return;
+    }
+
+    if (!relationshipGoal) {
+      setError("Select what you are looking for before continuing.");
+      return;
+    }
+
     const cleanedPrompts = prompts.map((p) => ({
       key: p.key,
       answer: p.answer.trim(),
@@ -124,15 +178,13 @@ export default function Onboarding({
       }
     }
 
-    // Hard 18+ age gate on the client (also enforced in Postgres via CHECK (age >= 18))
-    if (!isOver18Confirmed || Number(age) < 18) {
+    if (!isOver18Confirmed) {
       setError(
-        "You must be 18 or older to use pHavelength. Enter an age of 18 or above and check the age confirmation box."
+        "Please check the 18+ confirmation box to verify you are 18 years of age or older."
       );
       return;
     }
 
-    // Explicit DPDP consent gate
     if (!dpdpConsent) {
       setError(
         "Please check the DPDP consent box above to allow saving your profile."
@@ -140,12 +192,21 @@ export default function Onboarding({
       return;
     }
 
+    const mergedDetails: ProfileDetails = {
+      ...(existingProfile?.details &&
+      typeof existingProfile.details === "object"
+        ? existingProfile.details
+        : {}),
+      interests,
+    };
+
     setSaving(true);
 
     const row = {
       id: userId,
       full_name: fullName.trim(),
-      age: Number(age),
+      age: birthCheck.age,
+      birth_date: birthCheck.iso,
       gender,
       looking_for: lookingFor,
       city: city.trim(),
@@ -159,8 +220,13 @@ export default function Onboarding({
       avatar_url: avatarUrl,
       relationship_goal: relationshipGoal,
       prompts: cleanedPrompts,
+      details: mergedDetails,
       dpdp_consent_at:
         existingProfile?.dpdp_consent_at ?? new Date().toISOString(),
+      house_rules_accepted_at:
+        existingProfile?.house_rules_accepted_at ??
+        houseRulesAcceptedAt ??
+        new Date().toISOString(),
     };
 
     const { data, error: dbError } = await supabase
@@ -182,280 +248,383 @@ export default function Onboarding({
   }
 
   return (
-    <section className="mx-auto w-full max-w-[640px]">
+    <section className="mx-auto w-full max-w-[920px]">
       <form
         onSubmit={handleSubmit}
-        className="space-y-6 rounded-lg border border-dusk/20 bg-fog p-6 sm:p-8"
+        className="space-y-8 rounded-lg border border-dusk/20 bg-fog p-6 sm:p-8"
       >
-        <div>
-          <h1 className="text-2xl font-bold text-dusk">
-            Complete your profile
-          </h1>
-          <p className="mt-2 inline-block rounded border border-marigold bg-marigold/20 px-2.5 py-1 text-xs font-medium text-ink">
+        <div className="border-b border-dusk/15 pb-4">
+          <h1 className="text-2xl font-bold text-dusk">Create your profile</h1>
+          <p className="mt-1.5 inline-block rounded border border-marigold bg-marigold/20 px-2.5 py-1 text-xs font-medium text-ink">
             Simulated eLitmus verification (prototype — designed to plug into
             eLitmus data)
           </p>
         </div>
 
-        {/* Placeholder Avatar Picker (no real people's photos) */}
-        <fieldset>
-          <legend className="text-sm font-medium text-ink">
-            Choose an illustration avatar (prototype placeholder)
-          </legend>
-          <div className="mt-2.5 flex flex-wrap gap-3">
-            {AVATAR_OPTIONS.map((url, idx) => (
-              <button
-                key={url}
-                type="button"
-                aria-label={`Select illustration avatar ${idx + 1}`}
-                aria-pressed={avatarUrl === url}
-                onClick={() => setAvatarUrl(url)}
-                className={`min-h-[44px] min-w-[44px] rounded-xl border-2 p-1 ${
-                  avatarUrl === url
-                    ? "border-teal bg-teal/15"
-                    : "border-dusk/20 bg-fog opacity-80"
-                }`}
-              >
-                <img
-                  src={url}
-                  alt={`Illustration avatar ${idx + 1}`}
-                  className="h-12 w-12 rounded-lg"
-                />
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        {/* Basic Details */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="onb-full-name"
-              className="block text-sm font-medium text-ink"
-            >
-              Full name
-            </label>
-            <input
-              id="onb-full-name"
-              type="text"
-              required
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Aarav Sharma"
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="onb-age"
-              className="block text-sm font-medium text-ink"
-            >
-              Age (18+)
-            </label>
-            <input
-              id="onb-age"
-              type="number"
-              required
-              value={age}
-              onChange={(e) => setAge(Number(e.target.value))}
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <label
-              htmlFor="onb-gender"
-              className="block text-sm font-medium text-ink"
-            >
-              Gender
-            </label>
-            <select
-              id="onb-gender"
-              value={gender}
-              onChange={(e) => setGender(e.target.value)}
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
-            >
-              <option value="M">M</option>
-              <option value="F">F</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="onb-looking-for"
-              className="block text-sm font-medium text-ink"
-            >
-              Looking for
-            </label>
-            <select
-              id="onb-looking-for"
-              value={lookingFor}
-              onChange={(e) => setLookingFor(e.target.value)}
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
-            >
-              <option value="F">F</option>
-              <option value="M">M</option>
-              <option value="All">All</option>
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="onb-city"
-              className="block text-sm font-medium text-ink"
-            >
-              City
-            </label>
-            <select
-              id="onb-city"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
-            >
-              <option value="Bengaluru">Bengaluru</option>
-              <option value="Hyderabad">Hyderabad</option>
-              <option value="Pune">Pune</option>
-              <option value="NCR">NCR</option>
-              <option value="Chennai">Chennai</option>
-              <option value="Mumbai">Mumbai</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Relationship Goal (Required single-choice) */}
-        <fieldset className="space-y-2.5">
-          <legend className="text-sm font-medium text-ink">
-            What are you looking for?
-          </legend>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {RELATIONSHIP_GOALS.map((goal) => (
+        {/* Two columns on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-12">
+          {/* Left column: Identity, Birthday, Gender, Interested in, Looking for */}
+          <div className="space-y-5 md:col-span-7">
+            <div>
               <label
-                key={goal.key}
-                htmlFor={`onb-goal-${goal.key}`}
-                className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded border px-3 py-2 text-sm ${
-                  relationshipGoal === goal.key
-                    ? "border-dusk bg-dusk text-fog font-medium"
-                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
-                }`}
+                htmlFor="onb-first-name"
+                className="block text-sm font-medium text-ink"
               >
-                <input
-                  id={`onb-goal-${goal.key}`}
-                  type="radio"
-                  name="relationship_goal"
-                  value={goal.key}
-                  checked={relationshipGoal === goal.key}
-                  onChange={() => setRelationshipGoal(goal.key)}
-                  className="h-4 w-4 shrink-0 accent-teal"
-                />
-                <span>{goal.label}</span>
+                First name
               </label>
-            ))}
-          </div>
-        </fieldset>
+              <input
+                id="onb-first-name"
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="e.g. Aarav"
+                className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
+              />
+            </div>
 
-        {/* Simulated eLitmus Career & Batch Section */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="onb-batch"
-              className="block text-sm font-medium text-ink"
-            >
-              eLitmus batch (simulated)
-            </label>
-            <select
-              id="onb-batch"
-              value={batch}
-              onChange={(e) => setBatch(Number(e.target.value))}
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
-            >
-              <option value={2020}>2020</option>
-              <option value={2021}>2021</option>
-              <option value={2022}>2022</option>
-              <option value={2023}>2023</option>
-              <option value={2024}>2024</option>
-            </select>
-          </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="onb-email"
+                  className="block text-sm font-medium text-ink"
+                >
+                  Email
+                </label>
+                <span className="inline-flex items-center gap-1 rounded border border-teal/50 bg-teal/15 px-2 py-0.5 text-xs font-medium text-ink">
+                  <span aria-hidden="true">✓</span> Verified
+                </span>
+              </div>
+              <input
+                id="onb-email"
+                type="email"
+                readOnly
+                value={userEmail}
+                className="mt-1.5 min-h-[44px] w-full cursor-not-allowed rounded border border-dusk/20 bg-dusk/5 px-3 py-2 text-sm text-ink/80"
+              />
+            </div>
 
-          <div>
-            <label
-              htmlFor="onb-role"
-              className="block text-sm font-medium text-ink"
-            >
-              Role title
-            </label>
-            <input
-              id="onb-role"
-              type="text"
-              value={roleTitle}
-              onChange={(e) => setRoleTitle(e.target.value)}
-              placeholder="e.g. Software Engineer"
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
+            {/* Birthday as three fields: DD, MM, YYYY */}
+            <fieldset>
+              <legend className="text-sm font-medium text-ink">
+                Birthday (18 or older)
+              </legend>
+              <div className="mt-1.5 grid grid-cols-3 gap-3">
+                <div>
+                  <label
+                    htmlFor="onb-birth-dd"
+                    className="block text-xs font-medium text-ink/80"
+                  >
+                    DD
+                  </label>
+                  <input
+                    id="onb-birth-dd"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={2}
+                    required
+                    placeholder="DD"
+                    value={birthDay}
+                    onChange={(e) =>
+                      setBirthDay(e.target.value.replace(/\D/g, ""))
+                    }
+                    className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-center text-sm text-ink placeholder:text-ink/50"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="onb-birth-mm"
+                    className="block text-xs font-medium text-ink/80"
+                  >
+                    MM
+                  </label>
+                  <input
+                    id="onb-birth-mm"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={2}
+                    required
+                    placeholder="MM"
+                    value={birthMonth}
+                    onChange={(e) =>
+                      setBirthMonth(e.target.value.replace(/\D/g, ""))
+                    }
+                    className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-center text-sm text-ink placeholder:text-ink/50"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="onb-birth-yyyy"
+                    className="block text-xs font-medium text-ink/80"
+                  >
+                    YYYY
+                  </label>
+                  <input
+                    id="onb-birth-yyyy"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    required
+                    placeholder="YYYY"
+                    value={birthYear}
+                    onChange={(e) =>
+                      setBirthYear(e.target.value.replace(/\D/g, ""))
+                    }
+                    className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-center text-sm text-ink placeholder:text-ink/50"
+                  />
+                </div>
+              </div>
+            </fieldset>
+
+            {/* Gender (PillPicker) */}
+            <PillPicker
+              mode="single"
+              label="Gender"
+              required
+              placeholder="Add gender"
+              dialogTitle="Select your gender"
+              options={GENDER_OPTIONS}
+              value={gender}
+              onChange={(val) => setGender(val)}
             />
+
+            {/* Interested in (four single-select pills) */}
+            <fieldset>
+              <legend className="mb-1.5 block text-xs font-medium text-ink">
+                Interested in <span aria-hidden="true">*</span>
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {INTERESTED_IN_OPTIONS.map((opt) => {
+                  const selected = lookingFor === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setLookingFor(opt.value)}
+                      className={`inline-flex min-h-[44px] items-center rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                        selected
+                          ? "border-teal bg-dusk text-fog"
+                          : "border-dusk/30 bg-fog text-ink hover:border-dusk hover:bg-dusk/5"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            {/* Looking for (PillPicker using existing relationship goal values and labels) */}
+            <PillPicker
+              mode="single"
+              label="Looking for"
+              required
+              placeholder="Add relationship goal"
+              dialogTitle="What are you looking for?"
+              options={RELATIONSHIP_GOAL_OPTIONS}
+              value={relationshipGoal || null}
+              onChange={(val) =>
+                setRelationshipGoal((val as RelationshipGoal) ?? "")
+              }
+            />
+          </div>
+
+          {/* Right column: Choose your avatar (3x2 grid) */}
+          <div className="md:col-span-5">
+            <fieldset className="rounded-lg border border-dusk/15 bg-dusk/5 p-5">
+              <legend className="px-1 text-sm font-semibold text-dusk">
+                Choose your avatar
+              </legend>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                {AVATAR_OPTIONS.map((url, idx) => {
+                  const selected = avatarUrl === url;
+                  return (
+                    <button
+                      key={url}
+                      type="button"
+                      aria-label={`Select avatar ${idx + 1}`}
+                      aria-pressed={selected}
+                      onClick={() => setAvatarUrl(url)}
+                      className={`relative flex aspect-square min-h-[72px] items-center justify-center rounded-xl border-2 p-2 transition-colors ${
+                        selected
+                          ? "border-teal bg-teal/15 ring-2 ring-teal"
+                          : "border-dusk/20 bg-fog hover:border-dusk/50"
+                      }`}
+                    >
+                      <img
+                        src={url}
+                        alt={`Avatar illustration ${idx + 1}`}
+                        className="h-14 w-14 rounded-lg object-cover"
+                      />
+                      {selected && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute right-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-xs font-bold text-[#12122B]"
+                        >
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-ink/75">
+                Pick the avatar that fits you. Photo uploads aren&apos;t part of
+                this prototype.
+              </p>
+            </fieldset>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Full width 1: Work and privacy */}
+        <section className="space-y-4 rounded-lg border border-dusk/15 bg-dusk/5 p-5">
           <div>
-            <label
-              htmlFor="onb-company-domain"
-              className="block text-sm font-medium text-ink"
-            >
-              Company domain (self-declared, prototype)
-            </label>
-            <input
-              id="onb-company-domain"
-              type="text"
-              value={companyDomain}
-              onChange={(e) => setCompanyDomain(e.target.value)}
-              placeholder="e.g. flipkart.com"
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
-            />
+            <h2 className="text-base font-semibold text-dusk">
+              Work and privacy
+            </h2>
+            <p className="mt-0.5 text-xs text-ink/75">
+              City, batch, role, company domain, and college are self-declared
+              in this prototype (simulated eLitmus verification).
+            </p>
           </div>
 
-          <div>
-            <label
-              htmlFor="onb-college"
-              className="block text-sm font-medium text-ink"
-            >
-              College name
-            </label>
-            <input
-              id="onb-college"
-              type="text"
-              value={collegeName}
-              onChange={(e) => setCollegeName(e.target.value)}
-              placeholder="e.g. NIT Trichy"
-              className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label
+                htmlFor="onb-city"
+                className="block text-sm font-medium text-ink"
+              >
+                City
+              </label>
+              <select
+                id="onb-city"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
+              >
+                <option value="Bengaluru">Bengaluru</option>
+                <option value="Hyderabad">Hyderabad</option>
+                <option value="Pune">Pune</option>
+                <option value="NCR">NCR</option>
+                <option value="Chennai">Chennai</option>
+                <option value="Mumbai">Mumbai</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="onb-batch"
+                className="block text-sm font-medium text-ink"
+              >
+                Batch
+              </label>
+              <select
+                id="onb-batch"
+                value={batch}
+                onChange={(e) => setBatch(Number(e.target.value))}
+                className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
+              >
+                <option value={2020}>2020</option>
+                <option value={2021}>2021</option>
+                <option value={2022}>2022</option>
+                <option value={2023}>2023</option>
+                <option value={2024}>2024</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="onb-role"
+                className="block text-sm font-medium text-ink"
+              >
+                Role
+              </label>
+              <input
+                id="onb-role"
+                type="text"
+                value={roleTitle}
+                onChange={(e) => setRoleTitle(e.target.value)}
+                placeholder="e.g. Software Engineer"
+                className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
+              />
+            </div>
           </div>
-        </div>
 
-        <div>
-          <label
-            htmlFor="onb-bio"
-            className="block text-sm font-medium text-ink"
-          >
-            Short bio / weekend prompt
-          </label>
-          <textarea
-            id="onb-bio"
-            rows={3}
-            value={bioPrompt}
-            onChange={(e) => setBioPrompt(e.target.value)}
-            placeholder="What does an ideal low-pressure weekend look like for you?"
-            className="mt-1.5 w-full rounded border border-dusk/30 bg-fog px-3 py-2.5 font-serif text-sm leading-relaxed text-ink placeholder:font-sans placeholder:text-ink/50"
-          />
-        </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="onb-company-domain"
+                className="block text-sm font-medium text-ink"
+              >
+                Company domain
+              </label>
+              <input
+                id="onb-company-domain"
+                type="text"
+                value={companyDomain}
+                onChange={(e) => setCompanyDomain(e.target.value)}
+                placeholder="e.g. flipkart.com"
+                className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
+              />
+            </div>
 
-        {/* Profile Prompts (2 required, up to 3, 10-200 chars each) */}
-        <fieldset className="space-y-4 rounded-lg border border-dusk/15 bg-dusk/5 p-4">
+            <div>
+              <label
+                htmlFor="onb-college"
+                className="block text-sm font-medium text-ink"
+              >
+                College
+              </label>
+              <input
+                id="onb-college"
+                type="text"
+                value={collegeName}
+                onChange={(e) => setCollegeName(e.target.value)}
+                placeholder="e.g. NIT Trichy"
+                className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1 border-t border-dusk/15 pt-3">
+            <p className="text-xs font-semibold text-dusk">Privacy Shield</p>
+            <label
+              htmlFor="onb-hide-company"
+              className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink"
+            >
+              <input
+                id="onb-hide-company"
+                type="checkbox"
+                checked={hideSameCompany}
+                onChange={(e) => setHideSameCompany(e.target.checked)}
+                className="h-5 w-5 shrink-0 accent-teal"
+              />
+              <span>
+                Hide profiles with my company domain (avoid matching coworkers)
+              </span>
+            </label>
+            <label
+              htmlFor="onb-hide-college"
+              className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink"
+            >
+              <input
+                id="onb-hide-college"
+                type="checkbox"
+                checked={hideSameCollege}
+                onChange={(e) => setHideSameCollege(e.target.checked)}
+                className="h-5 w-5 shrink-0 accent-teal"
+              />
+              <span>Hide profiles from my college</span>
+            </label>
+          </div>
+        </section>
+
+        {/* Full width 2: Prompts */}
+        <fieldset className="space-y-4 rounded-lg border border-dusk/15 bg-dusk/5 p-5">
           <div>
-            <legend className="text-sm font-semibold text-dusk">
-              Profile prompts (at least 2 required, up to 3)
+            <legend className="text-base font-semibold text-dusk">
+              Prompts (minimum 2)
             </legend>
             <p className="mt-0.5 text-xs text-ink/75">
               Matches read these before chatting and reply to one on their first
@@ -473,7 +642,7 @@ export default function Onboarding({
                   htmlFor={`onb-prompt-key-${idx}`}
                   className="text-xs font-medium text-ink"
                 >
-                  Prompt topic
+                  Prompt topic {idx + 1}
                 </label>
                 {idx === 2 && (
                   <button
@@ -556,44 +725,54 @@ export default function Onboarding({
               Add a third prompt
             </button>
           )}
+
+          <div className="border-t border-dusk/15 pt-3">
+            <label
+              htmlFor="onb-bio"
+              className="block text-xs font-medium text-ink"
+            >
+              Short bio (optional)
+            </label>
+            <textarea
+              id="onb-bio"
+              rows={2}
+              value={bioPrompt}
+              onChange={(e) => setBioPrompt(e.target.value)}
+              placeholder="A line about your week or favourite way to unwind..."
+              className="mt-1 w-full rounded border border-dusk/30 bg-fog px-3 py-2 font-serif text-sm leading-relaxed text-ink placeholder:font-sans placeholder:text-ink/50"
+            />
+          </div>
         </fieldset>
 
-        {/* Privacy Shield Settings */}
-        <div className="space-y-2 rounded-lg border border-dusk/15 bg-dusk/5 p-4">
-          <h2 className="text-sm font-semibold text-dusk">
-            Privacy Shield settings
-          </h2>
-          <label
-            htmlFor="onb-hide-company"
-            className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink"
-          >
-            <input
-              id="onb-hide-company"
-              type="checkbox"
-              checked={hideSameCompany}
-              onChange={(e) => setHideSameCompany(e.target.checked)}
-              className="h-5 w-5 shrink-0 accent-teal"
-            />
-            <span>
-              Hide profiles with my company domain (avoid matching coworkers)
+        {/* Full width 3: Optional divider + Interests */}
+        <div className="space-y-4">
+          <div className="relative flex items-center py-1">
+            <div className="flex-grow border-t border-dusk/20" />
+            <span className="mx-4 shrink-0 text-xs font-semibold uppercase tracking-wider text-dusk/80">
+              Optional
             </span>
-          </label>
-          <label
-            htmlFor="onb-hide-college"
-            className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink"
-          >
-            <input
-              id="onb-hide-college"
-              type="checkbox"
-              checked={hideSameCollege}
-              onChange={(e) => setHideSameCollege(e.target.checked)}
-              className="h-5 w-5 shrink-0 accent-teal"
+            <div className="flex-grow border-t border-dusk/20" />
+          </div>
+
+          <div className="space-y-2 rounded-lg border border-dusk/15 bg-dusk/5 p-5">
+            <PillPicker
+              mode="multi"
+              label="Interests (max 6)"
+              placeholder="Add interests"
+              dialogTitle="Select your interests"
+              dialogSubtitle="Choose up to 6 interests."
+              options={INTEREST_OPTIONS}
+              values={interests}
+              maxSelections={6}
+              onChange={setInterests}
             />
-            <span>Hide profiles from my college</span>
-          </label>
+            <p className="text-xs text-ink/75">
+              You can add more about you later in Edit profile.
+            </p>
+          </div>
         </div>
 
-        {/* 18+ Age Gate & DPDP Consent */}
+        {/* Consent block */}
         <div className="space-y-2 rounded-lg border border-teal/40 bg-teal/10 p-4">
           <h2 className="text-sm font-semibold text-dusk">
             Age verification and DPDP consent
@@ -625,10 +804,12 @@ export default function Onboarding({
             />
             <span className="leading-relaxed">
               <strong>DPDP consent:</strong> I consent to pHavelength storing
-              and processing my profile details, self-declared company or
-              college, and quiz answers solely for generating curated matches
-              and website chat. This consent is recorded with a timestamp and I
-              can delete my account and all data at any time.
+              and processing my profile details, birth date, optional profile
+              details (such as interests, languages, and lifestyle preferences),
+              self-declared company or college, and quiz answers solely for
+              generating curated matches and website chat. This consent is
+              recorded with a timestamp and I can delete my account and all data
+              at any time.
             </span>
           </label>
         </div>
@@ -642,13 +823,26 @@ export default function Onboarding({
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="min-h-[44px] w-full rounded bg-dusk px-4 py-2.5 text-sm font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
-        >
-          {saving ? "Saving profile..." : "Save profile and continue"}
-        </button>
+        {/* Centered primary button + "Already have an account? Log in" */}
+        <div className="flex flex-col items-center gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="min-h-[44px] w-full max-w-xs rounded bg-dusk px-6 py-2.5 text-sm font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Continue"}
+          </button>
+
+          {onSignOut && (
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="inline-flex min-h-[44px] items-center justify-center rounded px-4 text-xs font-medium text-dusk underline decoration-dusk/40 underline-offset-4 hover:bg-dusk/10"
+            >
+              Already have an account? Log in
+            </button>
+          )}
+        </div>
       </form>
     </section>
   );

@@ -5,6 +5,7 @@ import {
   type RelationshipGoal,
   type SafePartnerProfile,
 } from "./supabase";
+import { getDisplayedAge } from "./profileOptions";
 
 export interface MatchWithProfile {
   matchId: string;
@@ -30,7 +31,8 @@ function toSafePartnerProfile(p: Profile): SafePartnerProfile {
   return {
     id: p.id,
     full_name: p.full_name,
-    age: p.age,
+    age: getDisplayedAge(p),
+    birth_date: p.birth_date ?? null,
     gender: p.gender,
     city: p.city,
     role_title: p.role_title,
@@ -39,7 +41,29 @@ function toSafePartnerProfile(p: Profile): SafePartnerProfile {
     avatar_url: p.avatar_url,
     relationship_goal: p.relationship_goal,
     prompts: p.prompts,
+    details: p.details ?? null,
   };
+}
+
+// A candidate qualifies only if my interested-in includes their gender
+// AND their interested-in includes my gender ("everyone" matches all).
+export function doesInterestedInIncludeGender(
+  interestedIn: string,
+  gender: string
+): boolean {
+  const normInterest = interestedIn.trim().toLowerCase();
+  const normGender = gender.trim().toLowerCase();
+  if (normInterest === "everyone" || normInterest === "all") return true;
+  if (normInterest === "men" || normInterest === "m") {
+    return normGender === "man" || normGender === "m";
+  }
+  if (normInterest === "women" || normInterest === "f") {
+    return normGender === "woman" || normGender === "f";
+  }
+  if (normInterest === "beyond_binary" || normInterest === "other") {
+    return normGender === "beyond_binary" || normGender === "other";
+  }
+  return false;
 }
 
 // 100 minus the average absolute difference across q1..q5, scaled from [0..4] to [0..100].
@@ -115,9 +139,13 @@ export async function getOrCreateTodaysMatchesForUser(
     if (candidate.id === me.id) continue;
     if (blockedIds.has(candidate.id)) continue;
 
-    // Mutual gender preference + same/nearby city check
-    if (me.looking_for !== "All" && candidate.gender !== me.looking_for) continue;
-    if (candidate.looking_for !== "All" && candidate.looking_for !== me.gender) continue;
+    // Mutual gender / interested-in check + same/nearby city check
+    if (
+      !doesInterestedInIncludeGender(me.looking_for, candidate.gender) ||
+      !doesInterestedInIncludeGender(candidate.looking_for, me.gender)
+    ) {
+      continue;
+    }
     if (!allowedCities.includes(candidate.city)) continue;
 
     // Privacy Shield: hide same company domain or same college

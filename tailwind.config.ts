@@ -9,11 +9,14 @@ export default {
     colors: {
       transparent: "transparent",
       current: "currentColor",
-      dusk: "#2B2A5C",
-      fog: "#EEF0F6",
-      ink: "#1B1B2F",
-      teal: "#1F9E9A",
-      marigold: "#F2A93B",
+      dusk: "rgb(var(--rgb-dusk) / <alpha-value>)",
+      fog: "rgb(var(--rgb-fog) / <alpha-value>)",
+      ink: "rgb(var(--rgb-ink) / <alpha-value>)",
+      teal: "rgb(var(--rgb-teal) / <alpha-value>)",
+      marigold: "rgb(var(--rgb-marigold) / <alpha-value>)",
+      surface: "rgb(var(--rgb-surface) / <alpha-value>)",
+      muted: "rgb(var(--rgb-muted) / <alpha-value>)",
+      border: "rgb(var(--rgb-border) / <alpha-value>)",
     },
     extend: {
       fontFamily: {

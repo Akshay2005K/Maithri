@@ -20,13 +20,22 @@ export const metadata: Metadata = {
   description: "Intentional dating website prototype for early-career professionals",
 };
 
+const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem("phavelength-theme")||"system";var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");document.documentElement.setAttribute("data-theme-pref",s);}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${bricolage.variable} ${literata.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${bricolage.variable} ${literata.variable}`}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="flex min-h-screen flex-col bg-fog font-sans text-ink antialiased">
         <div className="flex-1">{children}</div>
 
@@ -59,6 +68,12 @@ export default function RootLayout({
                 className="inline-flex min-h-[44px] items-center rounded px-3 text-sm text-ink underline-offset-4 hover:text-dusk hover:underline"
               >
                 Terms
+              </Link>
+              <Link
+                href="/safety"
+                className="inline-flex min-h-[44px] items-center rounded px-3 text-sm text-ink underline-offset-4 hover:text-dusk hover:underline"
+              >
+                Safety
               </Link>
               <Link
                 href="/grievance"

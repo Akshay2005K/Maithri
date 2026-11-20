@@ -7,6 +7,10 @@ import {
   type Profile,
   type SafePartnerProfile,
 } from "@/lib/supabase";
+import {
+  getDisplayedAge,
+  getProfileDetailChips,
+} from "@/lib/profileOptions";
 import { countWords, getUnblurStatus } from "@/lib/unblur";
 import WavePair from "@/components/WavePair";
 
@@ -115,6 +119,7 @@ export default function Chat({
   const unblur = getUnblurStatus(messages);
   const wordCount = countWords(draft);
   const partnerPrompts = Array.isArray(partner.prompts) ? partner.prompts : [];
+  const partnerDetailChips = getProfileDetailChips(partner.details);
   const myPrompts = Array.isArray(currentUser.prompts)
     ? currentUser.prompts
     : [];
@@ -314,7 +319,7 @@ export default function Chat({
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-dusk">
-                  {partner.full_name}, {partner.age}
+                  {partner.full_name}, {getDisplayedAge(partner)}
                 </p>
                 <p className="truncate text-xs text-ink/75">{unblur.label}</p>
               </div>
@@ -348,7 +353,7 @@ export default function Chat({
 
               <div className="min-w-0 flex-1 space-y-1">
                 <h2 className="text-lg font-semibold text-dusk">
-                  {partner.full_name}, {partner.age}
+                  {partner.full_name}, {getDisplayedAge(partner)}
                 </h2>
                 <p className="text-sm text-ink/80">
                   {partner.role_title || "Graduate"} • {partner.city} • Batch{" "}
@@ -371,6 +376,27 @@ export default function Chat({
               <p className="font-serif text-sm leading-relaxed text-ink/90">
                 &ldquo;{partner.bio_prompt}&rdquo;
               </p>
+            )}
+
+            {partnerDetailChips.length > 0 && (
+              <div className="space-y-1.5">
+                <h3 className="text-xs font-semibold text-dusk">
+                  Details and interests
+                </h3>
+                <div
+                  aria-label="Partner details and interests"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  {partnerDetailChips.map((chip) => (
+                    <span
+                      key={chip.key}
+                      className="inline-block rounded-full border border-dusk/25 bg-dusk/5 px-2.5 py-0.5 text-xs font-medium text-ink"
+                    >
+                      {chip.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
 
             {partnerPrompts.length > 0 && (

@@ -42,13 +42,48 @@ export default function PrivacyPage() {
               What we collect
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">
-              We collect only the information you explicitly enter during signup
-              and onboarding: email address (via Supabase Auth), name, age (18+
-              check), gender, looking-for preference, city, self-declared batch,
-              role, company domain, and college, bio prompt, illustration avatar
-              choice, and five compatibility quiz answers, plus your chat
-              messages and report or block actions.
+              We collect only the information you explicitly enter during signup,
+              onboarding, and profile editing:
             </p>
+            <ul className="list-disc space-y-1.5 pl-5 font-serif text-sm leading-relaxed text-ink/90">
+              <li>
+                <strong>Required account and profile fields:</strong> email
+                address (verified via Supabase Auth OTP), first/full name, birth
+                date (<code>birth_date</code>, used to derive your displayed age
+                and verify that you are 18 or older), gender (<code>man</code>,{" "}
+                <code>woman</code>, or <code>beyond_binary</code>),
+                interested-in preference (<code>men</code>, <code>women</code>,{" "}
+                <code>beyond_binary</code>, or <code>everyone</code>),
+                relationship goal (<code>looking_for</code>), city, two to three
+                profile prompts, illustration avatar choice, five compatibility
+                quiz answers (<code>q1</code>–<code>q5</code>), and timestamps
+                for DPDP consent (<code>dpdp_consent_at</code>) and house rules
+                acceptance (<code>house_rules_accepted_at</code>).
+              </li>
+              <li>
+                <strong>Self-declared work and Privacy Shield fields:</strong>{" "}
+                batch year, role title, self-declared company domain, college
+                name, and your two Privacy Shield toggles.
+              </li>
+              <li>
+                <strong>
+                  Optional profile details (<code>profiles.details</code>):
+                </strong>{" "}
+                interests (up to 6), languages spoken (up to 5), open to,
+                zodiac sign, education level, communication style, love style,
+                pets, drinking, smoking, and workout frequency. Every optional
+                detail can be cleared at any time and none of the optional{" "}
+                <code>details</code> fields are used in matching or
+                compatibility scoring.
+              </li>
+              <li>
+                <strong>Activity and browser-only preferences:</strong> your
+                chat messages, optional meetup plan links, report or block
+                actions, and your display theme preference (stored locally in
+                your browser&apos;s <code>localStorage</code> under{" "}
+                <code>phavelength-theme</code>, never sent to the database).
+              </li>
+            </ul>
           </section>
 
           <section className="space-y-2">

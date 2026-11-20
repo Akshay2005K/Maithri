@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { ProfileDetails } from "./profileOptions";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -45,6 +46,7 @@ export interface SafePartnerProfile {
   id: string;
   full_name: string;
   age: number;
+  birth_date?: string | null;
   gender: string;
   city: string;
   role_title: string | null;
@@ -53,6 +55,7 @@ export interface SafePartnerProfile {
   avatar_url: string | null;
   relationship_goal: RelationshipGoal | null;
   prompts: ProfilePrompt[] | null;
+  details?: ProfileDetails | null;
 }
 
 export interface Profile extends SafePartnerProfile {
@@ -67,6 +70,7 @@ export interface Profile extends SafePartnerProfile {
   q4: number | null;
   q5: number | null;
   dpdp_consent_at: string;
+  house_rules_accepted_at?: string | null;
   is_plus_mock: boolean;
   created_at?: string;
 }

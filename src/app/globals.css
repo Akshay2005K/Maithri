@@ -2,17 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #EEF0F6;
+  --color-surface: #F7F8FC;
+  --color-text: #1B1B2F;
+  --color-muted: #464866;
+  --color-border: #C4C7DC;
+
   --color-dusk: #2B2A5C;
   --color-fog: #EEF0F6;
   --color-ink: #1B1B2F;
   --color-teal: #1F9E9A;
   --color-marigold: #F2A93B;
+
+  --rgb-dusk: 43 42 92;
+  --rgb-fog: 238 240 246;
+  --rgb-ink: 27 27 47;
+  --rgb-teal: 31 158 154;
+  --rgb-marigold: 242 169 59;
+  --rgb-surface: 247 248 252;
+  --rgb-muted: 70 72 102;
+  --rgb-border: 196 199 220;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #12122B;
+  --color-surface: #1D1D3D;
+  --color-text: #EEF0F6;
+  --color-muted: #AEB2C8;
+  --color-border: #343459;
+
+  --color-dusk: #D6DAF7;
+  --color-fog: #12122B;
+  --color-ink: #EEF0F6;
+  --color-teal: #2BC4BF;
+  --color-marigold: #F5B754;
+
+  --rgb-dusk: 214 218 247;
+  --rgb-fog: 18 18 43;
+  --rgb-ink: 238 240 246;
+  --rgb-teal: 43 196 191;
+  --rgb-marigold: 245 183 84;
+  --rgb-surface: 29 29 61;
+  --rgb-muted: 174 178 200;
+  --rgb-border: 52 52 89;
 }
 
 body {
-  background-color: var(--color-fog);
-  color: var(--color-ink);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Ensure elevated surfaces, inputs, and dialogs use surface & border tokens in dark mode */
+html[data-theme="dark"] [role="dialog"] > div,
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+/* Keep modal overlays dark and readable in dark mode */
+html[data-theme="dark"] [role="dialog"] {
+  background-color: rgba(6, 6, 18, 0.78);
+}
+
+/* Ensure muted text classes maintain >= 4.5:1 contrast on dark backgrounds and surfaces */
+html[data-theme="dark"] .text-ink\/70,
+html[data-theme="dark"] .text-ink\/75,
+html[data-theme="dark"] .text-ink\/80 {
+  color: var(--color-muted);
 }
 
 @layer base {

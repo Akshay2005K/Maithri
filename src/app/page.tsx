@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import {
   supabase,
@@ -15,6 +16,7 @@ import Quiz from "@/components/Quiz";
 import Matches from "@/components/Matches";
 import Chat from "@/components/Chat";
 import ProfileSettings from "@/components/ProfileSettings";
+import HouseRulesModal from "@/components/HouseRulesModal";
 
 function isQuizComplete(profile: Profile | null): boolean {
   if (!profile) return false;
@@ -37,8 +39,20 @@ export default function HomePage() {
 
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingHouseRulesAt, setPendingHouseRulesAt] = useState<string | null>(
+    null
+  );
+  const [savingHouseRules, setSavingHouseRules] = useState(false);
+  const [houseRulesError, setHouseRulesError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("view") === "profile") {
+        setShowProfileView(true);
+      }
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       const candidateUser = session?.user ?? null;
       const confirmedUser = candidateUser?.email_confirmed_at
@@ -63,6 +77,8 @@ export default function HomePage() {
         setShowProfileView(false);
         setActiveChat(null);
         setMenuOpen(false);
+        setPendingHouseRulesAt(null);
+        setHouseRulesError(null);
         setLoading(false);
       }
     });
@@ -84,6 +100,33 @@ export default function HomePage() {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+  }
+
+  async function handleAcceptHouseRules() {
+    setHouseRulesError(null);
+    const now = new Date().toISOString();
+
+    if (!profile) {
+      // Brand-new user: store in component state until Onboarding creates the profile row
+      setPendingHouseRulesAt(now);
+      return;
+    }
+
+    setSavingHouseRules(true);
+    const { data, error: dbErr } = await supabase
+      .from("profiles")
+      .update({ house_rules_accepted_at: now })
+      .eq("id", profile.id)
+      .select()
+      .single();
+    setSavingHouseRules(false);
+
+    if (dbErr) {
+      setHouseRulesError(`${dbErr.message} Please try again.`);
+      return;
+    }
+
+    setProfile(data as Profile);
   }
 
   async function handleDeleteAccount() {
@@ -129,6 +172,9 @@ export default function HomePage() {
   const needsOnboarding = !profile;
   const needsQuiz = profile && !isQuizComplete(profile);
   const needsGoal = Boolean(profile && !profile.relationship_goal);
+  const needsHouseRules = Boolean(
+    user && (profile ? !profile.house_rules_accepted_at : !pendingHouseRulesAt)
+  );
   const canNavigateMain = Boolean(
     user && !needsOnboarding && !needsQuiz && !needsGoal
   );
@@ -158,7 +204,7 @@ export default function HomePage() {
               </span>
             </button>
 
-            {user && (
+            {user ? (
               <div className="flex items-center">
                 <button
                   type="button"
@@ -188,6 +234,13 @@ export default function HomePage() {
                   </svg>
                 </button>
               </div>
+            ) : (
+              <Link
+                href="/settings"
+                className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
+              >
+                Settings
+              </Link>
             )}
           </nav>
 
@@ -221,6 +274,13 @@ export default function HomePage() {
                   Profile
                 </button>
               )}
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
+                className="flex min-h-[44px] w-full items-center rounded px-3 text-left text-sm font-medium text-ink hover:bg-dusk/10"
+              >
+                Settings
+              </Link>
               <button
                 type="button"
                 onClick={() => {
@@ -242,8 +302,11 @@ export default function HomePage() {
         ) : needsOnboarding ? (
           <Onboarding
             userId={user.id}
+            userEmail={user.email ?? ""}
             existingProfile={profile}
+            houseRulesAcceptedAt={pendingHouseRulesAt}
             onComplete={(saved) => setProfile(saved)}
+            onSignOut={handleSignOut}
           />
         ) : needsQuiz ? (
           <Quiz
@@ -263,6 +326,7 @@ export default function HomePage() {
               setProfile(updated);
               setShowProfileView(false);
             }}
+            onProfileQuietUpdate={(updated) => setProfile(updated)}
             onCancel={() => setShowProfileView(false)}
             onDeleteAccount={handleDeleteAccount}
             deleting={deleting}
@@ -283,6 +347,15 @@ export default function HomePage() {
             onEditProfile={() => setShowProfileView(true)}
             onOpenChat={(match) => setActiveChat(match)}
             onProfileUpdated={(updated) => setProfile(updated)}
+          />
+        )}
+
+        {needsHouseRules && (
+          <HouseRulesModal
+            onAgree={handleAcceptHouseRules}
+            onSignOut={handleSignOut}
+            saving={savingHouseRules}
+            error={houseRulesError}
           />
         )}
       </main>
