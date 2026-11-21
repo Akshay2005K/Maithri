@@ -1,7 +1,57 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { VALID_CLOSURE_REASON_KEYS } from "@/lib/closureReasons";
 
-const ALLOWED_ACTIONS = new Set(["like", "pass", "save", "clear"]);
+const ALLOWED_SET_ACTIONS = new Set([
+  "like",
+  "pass",
+  "save",
+  "clear",
+  "dismiss_unmatched",
+]);
+
+function mapRpcErrorToResponse(message: string) {
+  if (message.includes("PASS_HAS_MESSAGES")) {
+    return NextResponse.json(
+      {
+        error:
+          "You have a conversation with this person now. Open the chat to unmatch.",
+        code: "PASS_HAS_MESSAGES",
+      },
+      { status: 409 }
+    );
+  }
+  if (message.includes("UNMATCH_REQUIRES_MESSAGES")) {
+    return NextResponse.json(
+      {
+        error: "Cannot unmatch before any messages exist. Use Pass instead.",
+        code: "UNMATCH_REQUIRES_MESSAGES",
+      },
+      { status: 409 }
+    );
+  }
+  if (
+    message.includes("ALREADY_CLOSED") ||
+    message.includes("MATCH_CLOSED") ||
+    message.includes("CANNOT_CLEAR_UNMATCHED") ||
+    message.includes("CANNOT_MODIFY_UNMATCHED")
+  ) {
+    return NextResponse.json({ error: message }, { status: 409 });
+  }
+  if (message.includes("NOT_PARTICIPANT")) {
+    return NextResponse.json(
+      { error: "You are not a participant of this match." },
+      { status: 403 }
+    );
+  }
+  if (message.includes("MATCH_NOT_FOUND")) {
+    return NextResponse.json({ error: "Match not found." }, { status: 404 });
+  }
+  if (message.includes("INVALID_REASON") || message.includes("INVALID_ACTION")) {
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+  return NextResponse.json({ error: message }, { status: 500 });
+}
 
 export async function POST(request: Request) {
   try {
@@ -20,10 +70,18 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const matchId = typeof body.matchId === "string" ? body.matchId.trim() : "";
     const action = typeof body.action === "string" ? body.action.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
-    if (!matchId || !ALLOWED_ACTIONS.has(action)) {
+    if (!matchId || (!ALLOWED_SET_ACTIONS.has(action) && action !== "unmatch")) {
       return NextResponse.json(
         { error: "Invalid matchId or action." },
+        { status: 400 }
+      );
+    }
+
+    if (action === "unmatch" && !VALID_CLOSURE_REASON_KEYS.has(reason)) {
+      return NextResponse.json(
+        { error: "Select a valid reason before unmatching." },
         { status: 400 }
       );
     }
@@ -48,46 +106,38 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: matchRow, error: matchErr } = await supabaseAdmin
-      .from("matches")
-      .select("id, user_a, user_b, action_state")
-      .eq("id", matchId)
-      .maybeSingle();
+    if (action === "unmatch") {
+      const { error: rpcErr } = await supabaseAdmin.rpc("unmatch_match", {
+        p_match_id: matchId,
+        p_user_id: user.id,
+        p_reason: reason,
+      });
 
-    if (matchErr || !matchRow) {
-      return NextResponse.json({ error: "Match not found." }, { status: 404 });
+      if (rpcErr) {
+        return mapRpcErrorToResponse(rpcErr.message);
+      }
+
+      return NextResponse.json({ ok: true, myAction: "unmatched" });
     }
 
-    if (matchRow.user_a !== user.id && matchRow.user_b !== user.id) {
-      return NextResponse.json(
-        { error: "You are not a participant of this match." },
-        { status: 403 }
-      );
-    }
+    const { error: rpcErr } = await supabaseAdmin.rpc("set_match_action", {
+      p_match_id: matchId,
+      p_user_id: user.id,
+      p_action: action,
+    });
 
-    const currentState =
-      matchRow.action_state && typeof matchRow.action_state === "object"
-        ? { ...(matchRow.action_state as Record<string, string>) }
-        : {};
-
-    if (action === "clear") {
-      delete currentState[user.id];
-    } else {
-      currentState[user.id] = action;
-    }
-
-    const { error: updateErr } = await supabaseAdmin
-      .from("matches")
-      .update({ action_state: currentState })
-      .eq("id", matchId);
-
-    if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    if (rpcErr) {
+      return mapRpcErrorToResponse(rpcErr.message);
     }
 
     return NextResponse.json({
       ok: true,
-      myAction: action === "clear" ? null : action,
+      myAction:
+        action === "clear"
+          ? null
+          : action === "dismiss_unmatched"
+            ? "unmatched"
+            : action,
     });
   } catch (err) {
     return NextResponse.json(

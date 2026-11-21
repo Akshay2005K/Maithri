@@ -105,8 +105,11 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    - **Level 1 (`blur-xl`):** Fewer than 2 distinct writers (0 or only 1 person has written valid messages).
    - **Level 2 (`blur-md`):** Both participants have written at least 1 valid message, and `validCount < 3` (e.g., 1 message from each person = 2 total).
    - **Level 3 (`blur-none`):** Both participants have written AND `validCount >= 3`.
-3. **Live Sync:** `Chat.tsx` loads messages ordered by `created_at` and polls Supabase every 4 seconds (plus a manual **Refresh** button) so two accounts testing in separate windows see updates.
-4. **Report & Block:** Clicking **Report / Block** lets the user select a reason and insert into `reports_blocks` (`reporter_id = currentUser.id`, `reported_id = partner.id`). `onBlocked()` immediately exits the chat and `Matches.tsx` filters out that match and excludes them from future matching.
+3. **Live Sync & Read Receipts:** `Chat.tsx` subscribes to Supabase Realtime (`postgres_changes`) for instant messages, read receipts (`Sent` / `Seen`), and live unmatch closure, with a 15s fallback poll and a manual **Refresh messages** button.
+4. **Unified Pass & Unmatch (`Matches.tsx`, `Chat.tsx`, `/api/match-action`):**
+   - **Pass (zero messages only):** Available on match cards and in chat when no messages exist. Quietly removes the match for both people (with a 6-second `"Passed. Undo"` toast on cards) and prevents future re-matching. If a message arrives before Pass completes, the API returns `409` and prompts the user to open chat to unmatch.
+   - **Unmatch (once messages exist):** Available only inside Chat once at least one message exists. Requires choosing one of four fixed polite closure messages, hides the match for the user who unmatched, and notifies the other person (`"Unmatched"`, `"This match has ended."`, read-only chat history, and a `"Remove from my list"` button).
+5. **Report & Block:** Clicking **Report and block** lets the user select a reason and insert into `reports_blocks` (`reporter_id = currentUser.id`, `reported_id = partner.id`). `onBlocked()` immediately exits the chat and RLS + `/api/matches` prevent either user from reading/sending messages or matching again.
 
 ### F. Mock Paywall (`PaywallModal.tsx`, `Matches.tsx`)
 - When `!profile.is_plus_mock && todaysMatches.length >= 3`, `Matches.tsx` shows an **Unlock 4th Daily Match (Mock Paywall)** card labeled `"Mock paywall, no payment"`.
@@ -141,7 +144,8 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 3. **Illustration avatars instead of photos (and CSS-only blur):** All profiles use local SVG illustration avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`) instead of real user photo uploads. Photo blur (`blur-xl` / `blur-md` / `blur-none`) is applied visually in CSS while the SVG URL remains in the DOM; a production system with real photos would store pre-blurred assets and serve signed URLs on the server.
 4. **Self-declared workplace, college, and batch:** Company domains, college names, role titles, and eLitmus batches are self-declared; no live eLitmus candidate database API or corporate email verification is integrated.
 5. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are unguessable 128-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
-6. **Mock paywall & no formal legal review:** The 4th daily match unlock is a mock toggle with no real payment processor, and the DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
+6. **Mock paywall & no formal legal review:** The 4th daily match unlock is a mock toggle with no real payment processor (`is_plus_mock` is a demo flag — without the `migrations_improvements.sql` trigger, `profiles` RLS allows client-side edits; with it, `/api/mock-plus` handles the free toggle), and the DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
+7. **Unified Pass & Unmatch limits:** Closure messages on Unmatch are a fixed set of four polite options (no free text), and a silent **Pass** on a zero-message match can still be noticed by the other person if they already viewed their list before refreshing.
 
 ---
 
@@ -154,7 +158,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, and `supabase/migrations_improvements.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, and `supabase/migrations_pass_unmatch.sql` in **SQL Editor**.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:

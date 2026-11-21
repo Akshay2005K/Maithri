@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { VALID_CLOSURE_REASON_KEYS } from "@/lib/closureReasons";
 
-// Server-only route to unmatch without filing a report.
-// Verifies the caller's JWT and confirms they are user_a or user_b on the match.
+// Server-only route delegating to unmatch_match RPC so /api/unmatch and
+// /api/match-action share one atomic database mechanism.
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -19,9 +20,18 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const matchId = typeof body.matchId === "string" ? body.matchId.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+
     if (!matchId) {
       return NextResponse.json(
         { error: "Missing matchId." },
+        { status: 400 }
+      );
+    }
+
+    if (!VALID_CLOSURE_REASON_KEYS.has(reason)) {
+      return NextResponse.json(
+        { error: "Select a valid reason before unmatching." },
         { status: 400 }
       );
     }
@@ -46,45 +56,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: matchRow, error: matchErr } = await supabaseAdmin
-      .from("matches")
-      .select("id, user_a, user_b")
-      .eq("id", matchId)
-      .maybeSingle();
+    const { error: rpcErr } = await supabaseAdmin.rpc("unmatch_match", {
+      p_match_id: matchId,
+      p_user_id: user.id,
+      p_reason: reason,
+    });
 
-    if (matchErr || !matchRow) {
-      return NextResponse.json(
-        { error: "Match not found." },
-        { status: 404 }
-      );
+    if (rpcErr) {
+      const msg = rpcErr.message;
+      const status = msg.includes("NOT_PARTICIPANT")
+        ? 403
+        : msg.includes("MATCH_NOT_FOUND")
+          ? 404
+          : msg.includes("ALREADY_CLOSED") ||
+              msg.includes("UNMATCH_REQUIRES_MESSAGES")
+            ? 409
+            : 500;
+      return NextResponse.json({ error: msg }, { status });
     }
-
-    if (matchRow.user_a !== user.id && matchRow.user_b !== user.id) {
-      return NextResponse.json(
-        { error: "You are not a participant of this match." },
-        { status: 403 }
-      );
-    }
-
-    // Soft-unmatch: mark the match as unmatched so it disappears for both users
-    // and is never re-matched in future daily runs.
-    const { error: updateErr } = await supabaseAdmin
-      .from("matches")
-      .update({
-        unmatched_at: new Date().toISOString(),
-        unmatched_by: user.id,
-      })
-      .eq("id", matchId);
-
-    if (updateErr) {
-      return NextResponse.json(
-        { error: updateErr.message },
-        { status: 500 }
-      );
-    }
-
-    // Remove any active Share Date links for this match
-    await supabaseAdmin.from("date_plans").delete().eq("match_id", matchId);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

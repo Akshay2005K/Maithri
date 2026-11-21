@@ -339,6 +339,8 @@ export default function HomePage() {
             partner={activeChat.partner}
             compatibilityScore={activeChat.compatibilityScore}
             breakdown={activeChat.breakdown}
+            unmatchedByPartner={activeChat.unmatchedByPartner}
+            closureReason={activeChat.closureReason}
             onBack={() => setActiveChat(null)}
             onBlocked={() => setActiveChat(null)}
           />

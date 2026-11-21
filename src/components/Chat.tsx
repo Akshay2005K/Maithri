@@ -13,7 +13,12 @@ import {
 } from "@/lib/profileOptions";
 import { countWords, getUnblurStatus } from "@/lib/unblur";
 import type { CompatibilityBreakdown } from "@/lib/matching";
+import {
+  getClosureReasonMessage,
+  type ClosureReasonKey,
+} from "@/lib/closureReasons";
 import WavePair from "@/components/WavePair";
+import UnmatchDialog from "@/components/UnmatchDialog";
 
 interface MessageRow {
   id: string;
@@ -48,6 +53,8 @@ interface ChatProps {
   partner: SafePartnerProfile;
   compatibilityScore: number;
   breakdown?: CompatibilityBreakdown;
+  unmatchedByPartner?: boolean;
+  closureReason?: string | null;
   onBack: () => void;
   onBlocked: () => void;
 }
@@ -138,6 +145,8 @@ export default function Chat({
   partner,
   compatibilityScore,
   breakdown,
+  unmatchedByPartner = false,
+  closureReason = null,
   onBack,
   onBlocked,
 }: ChatProps) {
@@ -150,8 +159,15 @@ export default function Chat({
   const [showReportBox, setShowReportBox] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
   const [blocking, setBlocking] = useState(false);
-  const [showUnmatchBox, setShowUnmatchBox] = useState(false);
+  const [showUnmatchDialog, setShowUnmatchDialog] = useState(false);
   const [unmatching, setUnmatching] = useState(false);
+  const [unmatchError, setUnmatchError] = useState<string | null>(null);
+  const [passing, setPassing] = useState(false);
+  const [isClosedByPartner, setIsClosedByPartner] =
+    useState(unmatchedByPartner);
+  const [liveClosureReason, setLiveClosureReason] = useState<string | null>(
+    closureReason
+  );
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [selectedPromptKey, setSelectedPromptKey] = useState<string>("");
 
@@ -242,6 +258,30 @@ export default function Chat({
           setMessages((prev) =>
             prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
           );
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "matches",
+          filter: `id=eq.${matchId}`,
+        },
+        (payload) => {
+          const updatedMatch = payload.new as {
+            closed_at?: string | null;
+            closed_by?: string | null;
+            closure_reason?: string | null;
+          };
+          if (
+            updatedMatch.closed_at &&
+            updatedMatch.closed_by &&
+            updatedMatch.closed_by !== currentUser.id
+          ) {
+            setIsClosedByPartner(true);
+            setLiveClosureReason(updatedMatch.closure_reason ?? null);
+          }
         }
       )
       .subscribe();
@@ -347,7 +387,85 @@ export default function Chat({
     onBlocked();
   }
 
-  async function handleUnmatch() {
+  async function handleUnmatch(reason: ClosureReasonKey) {
+    setUnmatchError(null);
+    setUnmatching(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setUnmatchError("No active session found. Sign in again and retry.");
+      setUnmatching(false);
+      return;
+    }
+
+    const res = await fetch("/api/match-action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ matchId, action: "unmatch", reason }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    setUnmatching(false);
+
+    if (!res.ok) {
+      setUnmatchError(body.error || "Could not unmatch. Please try again.");
+      return;
+    }
+
+    setShowUnmatchDialog(false);
+    onBlocked();
+  }
+
+  async function handlePassInChat() {
+    setError(null);
+    setPassing(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setError("No active session found. Sign in again and retry.");
+      setPassing(false);
+      return;
+    }
+
+    const res = await fetch("/api/match-action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ matchId, action: "pass" }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    setPassing(false);
+
+    if (res.status === 409 && body.code === "PASS_HAS_MESSAGES") {
+      await fetchMessages();
+      setError(
+        body.error ||
+          "You have a conversation with this person now. Open the chat to unmatch."
+      );
+      return;
+    }
+
+    if (!res.ok) {
+      setError(body.error || "Could not pass. Please try again.");
+      return;
+    }
+
+    onBlocked();
+  }
+
+  async function handleDismissUnmatched() {
     setError(null);
     setUnmatching(true);
 
@@ -361,20 +479,20 @@ export default function Chat({
       return;
     }
 
-    const res = await fetch("/api/unmatch", {
+    const res = await fetch("/api/match-action", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ matchId }),
+      body: JSON.stringify({ matchId, action: "dismiss_unmatched" }),
     });
 
     const body = await res.json().catch(() => ({}));
     setUnmatching(false);
 
     if (!res.ok) {
-      setError(body.error || "Could not unmatch. Please try again.");
+      setError(body.error || "Could not remove match. Please try again.");
       return;
     }
 
@@ -793,53 +911,57 @@ export default function Chat({
               )}
             </div>
 
-            {/* Unmatch & Report / Block */}
+            {/* Pass (0 messages) / Unmatch (has messages) / Remove (closed) & Report / Block */}
             <div className="space-y-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowUnmatchBox((prev) => !prev);
-                  setShowReportBox(false);
-                }}
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-4 text-sm font-medium text-dusk hover:bg-dusk/10"
-              >
-                {showUnmatchBox ? "Close unmatch" : "Unmatch"}
-              </button>
-
-              {showUnmatchBox && (
-                <div className="space-y-3 rounded-lg border border-dusk/25 bg-dusk/5 p-4 text-xs text-ink">
-                  <p className="text-sm font-semibold text-dusk">
-                    Unmatch with {partner.full_name}?
+              {isClosedByPartner ? (
+                <div className="space-y-2 rounded-lg border border-marigold/60 bg-marigold/15 p-3.5 text-xs text-ink">
+                  <span className="inline-block rounded border border-marigold bg-marigold/25 px-2 py-0.5 text-[11px] font-semibold text-ink">
+                    Unmatched
+                  </span>
+                  <p className="font-semibold text-dusk">
+                    This match has ended.
                   </p>
-                  <p className="leading-relaxed text-ink/85">
-                    This removes the match and conversation for both people
-                    without filing a safety report.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={unmatching}
-                      onClick={handleUnmatch}
-                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded bg-dusk px-3 text-xs font-medium text-fog disabled:opacity-50"
-                    >
-                      {unmatching ? "Removing..." : "Confirm unmatch"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowUnmatchBox(false)}
-                      className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-ink"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  {getClosureReasonMessage(liveClosureReason) && (
+                    <p className="font-serif leading-relaxed">
+                      &ldquo;{getClosureReasonMessage(liveClosureReason)}&rdquo;
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={unmatching}
+                    onClick={handleDismissUnmatched}
+                    className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/30 bg-fog px-4 text-xs font-medium text-dusk hover:bg-dusk/10 disabled:opacity-50"
+                  >
+                    {unmatching ? "Removing..." : "Remove from my list"}
+                  </button>
                 </div>
+              ) : messages.length === 0 ? (
+                <button
+                  type="button"
+                  disabled={passing}
+                  onClick={handlePassInChat}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-4 text-sm font-medium text-dusk hover:bg-marigold/15 disabled:opacity-50"
+                >
+                  {passing ? "Passing..." : "Pass"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUnmatchError(null);
+                    setShowUnmatchDialog(true);
+                    setShowReportBox(false);
+                  }}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-4 text-sm font-medium text-dusk hover:bg-dusk/10"
+                >
+                  Unmatch
+                </button>
               )}
 
               <button
                 type="button"
                 onClick={() => {
                   setShowReportBox(!showReportBox);
-                  setShowUnmatchBox(false);
                 }}
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-4 text-sm font-medium text-dusk hover:bg-marigold/20"
               >
@@ -979,7 +1101,39 @@ export default function Chat({
             onSubmit={handleSend}
             className="mt-auto space-y-3 border-t border-dusk/15 pt-4"
           >
-            {isFirstMessage && partnerPrompts.length > 0 && (
+            {isClosedByPartner ? (
+              <div className="space-y-2.5 rounded-lg border border-marigold bg-marigold/15 p-4 text-xs text-ink">
+                <p className="text-sm font-semibold text-dusk">
+                  This match has ended.
+                </p>
+                {getClosureReasonMessage(liveClosureReason) && (
+                  <p className="font-serif text-sm leading-relaxed">
+                    &ldquo;{getClosureReasonMessage(liveClosureReason)}&rdquo;
+                  </p>
+                )}
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+                  <input
+                    id="chat-message-input"
+                    type="text"
+                    disabled
+                    value=""
+                    placeholder="Conversation is read-only."
+                    aria-label="Conversation is read-only"
+                    className="min-h-[44px] flex-1 cursor-not-allowed rounded border border-dusk/20 bg-dusk/5 px-3 py-2 text-sm text-ink/60"
+                  />
+                  <button
+                    type="button"
+                    disabled={unmatching}
+                    onClick={handleDismissUnmatched}
+                    className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded bg-dusk px-4 text-xs font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
+                  >
+                    {unmatching ? "Removing..." : "Remove from my list"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {isFirstMessage && partnerPrompts.length > 0 && (
               <fieldset className="space-y-2 rounded-lg border border-teal/40 bg-teal/10 p-3.5">
                 <legend className="text-xs font-semibold text-dusk">
                   Reply to one of {partner.full_name}&apos;s prompts to start
@@ -1093,9 +1247,20 @@ export default function Chat({
                 {error}
               </p>
             )}
+              </>
+            )}
           </form>
         </div>
       </div>
+
+      <UnmatchDialog
+        open={showUnmatchDialog}
+        partnerName={partner.full_name}
+        submitting={unmatching}
+        error={unmatchError}
+        onConfirm={handleUnmatch}
+        onClose={() => setShowUnmatchDialog(false)}
+      />
     </section>
   );
 }

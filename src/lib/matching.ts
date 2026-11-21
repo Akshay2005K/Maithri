@@ -30,6 +30,10 @@ export interface MatchWithProfile {
   partner: SafePartnerProfile;
   breakdown: CompatibilityBreakdown;
   myAction?: MatchUserAction;
+  hasMessages: boolean;
+  unmatchedByPartner?: boolean;
+  closedAt?: string | null;
+  closureReason?: string | null;
 }
 
 const GOAL_ORDER: Record<RelationshipGoal, number> = Object.fromEntries(
@@ -207,16 +211,27 @@ export async function getOrCreateTodaysMatchesForUser(
   );
 
   // Enforce the daily cap (3/day, or 4/day with Plus) by counting all rows created today
-  // (including unmatched ones so unmatching cannot bypass the daily cap),
-  // while displaying only non-blocked, non-unmatched matches.
+  // (including passed/unmatched ones so neither can bypass the daily cap).
   const activeExisting = (existingMatches ?? []).filter((m) => {
-    if (m.unmatched_at) return false;
-    if (blockedIds.has(m.user_a === me.id ? m.user_b : m.user_a)) return false;
+    const partnerId = m.user_a === me.id ? m.user_b : m.user_a;
+    if (blockedIds.has(partnerId)) return false;
+
     const actionMap =
       m.action_state && typeof m.action_state === "object"
         ? (m.action_state as Record<string, string>)
         : {};
-    if (actionMap[me.id] === "pass") return false;
+    const myState = actionMap[me.id];
+    const partnerState = actionMap[partnerId];
+
+    // Hide if I passed or unmatched/dismissed, or if the partner passed (quiet removal)
+    if (myState === "pass" || myState === "unmatched") return false;
+    if (partnerState === "pass") return false;
+
+    // If closed/unmatched, hide from the person who closed it, keep visible for the other person
+    const closedAt = m.closed_at ?? m.unmatched_at;
+    const closedBy = m.closed_by ?? m.unmatched_by;
+    if (closedAt && closedBy === me.id) return false;
+
     return true;
   });
   const todaysCreatedCount = (existingMatches ?? []).filter(
@@ -375,10 +390,15 @@ export async function getOrCreateTodaysMatchesForUser(
             : null;
 
         const safePartner = toSafePartnerProfile(partner);
+        const matchMsgs = messagesByMatch.get(m.id) ?? [];
+        const hasMessages = matchMsgs.length > 0;
+        const closedAt = (m.closed_at ?? m.unmatched_at ?? null) as string | null;
+        const closedBy = (m.closed_by ?? m.unmatched_by ?? null) as string | null;
+        const unmatchedByPartner = Boolean(closedAt && closedBy !== me.id);
 
         // If partner uploaded a real photo, serve only the signed URL matching the current unblur level
         if (partner.photo_paths && typeof partner.photo_paths === "object") {
-          const unblur = getUnblurStatus(messagesByMatch.get(m.id) ?? []);
+          const unblur = getUnblurStatus(matchMsgs);
           const levelPath =
             unblur.level === 3
               ? partner.photo_paths.full
@@ -413,6 +433,10 @@ export async function getOrCreateTodaysMatchesForUser(
           partner: safePartner,
           breakdown: computeCompatibilityBreakdown(me, partner),
           myAction,
+          hasMessages,
+          unmatchedByPartner,
+          closedAt,
+          closureReason: (m.closure_reason as string | null) ?? null,
         };
       })
     );

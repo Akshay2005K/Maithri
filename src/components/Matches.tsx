@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   supabase,
   getRelationshipGoalLabel,
   type Profile,
 } from "@/lib/supabase";
+import { getClosureReasonMessage } from "@/lib/closureReasons";
 import {
   getDisplayedAge,
   getProfileDetailChips,
@@ -47,6 +48,47 @@ export default function Matches({
   const [showPaywall, setShowPaywall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [undoToast, setUndoToast] = useState<{
+    match: MatchWithProfile;
+    source: "today" | "earlier";
+  } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoRemainingRef = useRef<number>(6000);
+  const undoStartedAtRef = useRef<number>(0);
+
+  function clearUndoTimer() {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  }
+
+  function startUndoTimer(durationMs: number) {
+    clearUndoTimer();
+    undoStartedAtRef.current = Date.now();
+    undoRemainingRef.current = durationMs;
+    undoTimerRef.current = setTimeout(() => {
+      setUndoToast(null);
+      undoTimerRef.current = null;
+    }, durationMs);
+  }
+
+  function pauseUndoTimer() {
+    if (!undoTimerRef.current) return;
+    clearUndoTimer();
+    const elapsed = Date.now() - undoStartedAtRef.current;
+    undoRemainingRef.current = Math.max(500, undoRemainingRef.current - elapsed);
+  }
+
+  function resumeUndoTimer() {
+    if (!undoToast || undoTimerRef.current) return;
+    startUndoTimer(undoRemainingRef.current);
+  }
+
+  useEffect(() => {
+    return () => clearUndoTimer();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -124,8 +166,103 @@ export default function Matches({
 
   async function handleMatchAction(
     matchId: string,
-    action: "like" | "pass" | "save" | "clear"
+    action: "like" | "pass" | "save" | "clear" | "dismiss_unmatched"
   ) {
+    setActionNotice(null);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+
+    const targetInToday = todaysMatches.find((m) => m.matchId === matchId);
+    const targetInEarlier = earlierMatches.find((m) => m.matchId === matchId);
+    const targetItem = targetInToday ?? targetInEarlier;
+
+    const res = await fetch("/api/match-action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ matchId, action }),
+    });
+    const body = await res.json().catch(() => ({}));
+
+    if (res.status === 409 && body.code === "PASS_HAS_MESSAGES") {
+      // Refresh this match's state so it switches from Pass to Open chat
+      const { data: msgRows } = await supabase
+        .from("messages")
+        .select("match_id, sender_id, content, created_at")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: true });
+
+      if (msgRows && msgRows.length > 0) {
+        const latest = msgRows[msgRows.length - 1];
+        setLastMessageByMatch((prev) => ({
+          ...prev,
+          [matchId]: {
+            content: latest.content,
+            isMine: latest.sender_id === profile.id,
+          },
+        }));
+        setUnblurByMatch((prev) => ({
+          ...prev,
+          [matchId]: getUnblurStatus(msgRows),
+        }));
+      }
+
+      const markHasMessages = (list: MatchWithProfile[]) =>
+        list.map((m) =>
+          m.matchId === matchId ? { ...m, hasMessages: true } : m
+        );
+      setTodaysMatches((prev) => markHasMessages(prev));
+      setEarlierMatches((prev) => markHasMessages(prev));
+      setActionNotice(
+        body.error ||
+          "You have a conversation with this person now. Open the chat to unmatch."
+      );
+      return;
+    }
+
+    if (!res.ok) {
+      setActionNotice(body.error || "Could not update match.");
+      return;
+    }
+
+    if (action === "pass" && targetItem) {
+      setTodaysMatches((prev) => prev.filter((m) => m.matchId !== matchId));
+      setEarlierMatches((prev) => prev.filter((m) => m.matchId !== matchId));
+      setUndoToast({
+        match: targetItem,
+        source: targetInToday ? "today" : "earlier",
+      });
+      startUndoTimer(6000);
+      return;
+    }
+
+    if (action === "dismiss_unmatched") {
+      setTodaysMatches((prev) => prev.filter((m) => m.matchId !== matchId));
+      setEarlierMatches((prev) => prev.filter((m) => m.matchId !== matchId));
+      return;
+    }
+
+    const updateList = (list: MatchWithProfile[]) =>
+      list.map((m) =>
+        m.matchId === matchId
+          ? { ...m, myAction: action === "clear" ? null : action }
+          : m
+      );
+
+    setTodaysMatches((prev) => updateList(prev));
+    setEarlierMatches((prev) => updateList(prev));
+  }
+
+  async function handleUndoPass() {
+    if (!undoToast) return;
+    const { match, source } = undoToast;
+    clearUndoTimer();
+    setUndoToast(null);
+
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -137,21 +274,25 @@ export default function Matches({
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ matchId, action }),
+      body: JSON.stringify({ matchId: match.matchId, action: "clear" }),
     });
-    if (!res.ok) return;
 
-    const updateList = (list: MatchWithProfile[]) =>
-      action === "pass"
-        ? list.filter((m) => m.matchId !== matchId)
-        : list.map((m) =>
-            m.matchId === matchId
-              ? { ...m, myAction: action === "clear" ? null : action }
-              : m
-          );
-
-    setTodaysMatches((prev) => updateList(prev));
-    setEarlierMatches((prev) => updateList(prev));
+    if (res.ok) {
+      const restored: MatchWithProfile = { ...match, myAction: null };
+      if (source === "today") {
+        setTodaysMatches((prev) =>
+          prev.some((m) => m.matchId === restored.matchId)
+            ? prev
+            : [restored, ...prev]
+        );
+      } else {
+        setEarlierMatches((prev) =>
+          prev.some((m) => m.matchId === restored.matchId)
+            ? prev
+            : [restored, ...prev]
+        );
+      }
+    }
   }
 
   if (loading) {
@@ -258,6 +399,15 @@ export default function Matches({
         </p>
       )}
 
+      {actionNotice && (
+        <p
+          role="status"
+          className="rounded border border-marigold bg-marigold/20 p-3.5 text-sm font-medium text-ink"
+        >
+          {actionNotice}
+        </p>
+      )}
+
       {/* Full-width vertical list of matches */}
       {visibleTodays.length === 0 ? (
         <div className="rounded-lg border border-dusk/20 bg-dusk/5 p-6 text-left">
@@ -354,6 +504,27 @@ export default function Matches({
           }}
         />
       )}
+
+      {undoToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          onMouseEnter={pauseUndoTimer}
+          onMouseLeave={resumeUndoTimer}
+          onFocus={pauseUndoTimer}
+          onBlur={resumeUndoTimer}
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-teal bg-dusk px-4 py-2.5 text-sm text-fog shadow-lg"
+        >
+          <span>Passed.</span>
+          <button
+            type="button"
+            onClick={handleUndoPass}
+            className="inline-flex min-h-[44px] items-center rounded border border-teal px-3 text-xs font-semibold text-teal hover:bg-teal/15"
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -369,7 +540,9 @@ function MatchRow({
   unblur?: UnblurStatus;
   lastMessage?: LastMessagePreview;
   onOpenChat: () => void;
-  onAction: (action: "like" | "pass" | "save" | "clear") => void;
+  onAction: (
+    action: "like" | "pass" | "save" | "clear" | "dismiss_unmatched"
+  ) => void;
 }) {
   const { partner, compatibilityScore, breakdown } = item;
   const blurClass = unblur?.blurClass ?? "blur-xl";
@@ -409,6 +582,11 @@ function MatchRow({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {item.unmatchedByPartner && (
+              <span className="inline-block rounded border border-marigold bg-marigold/25 px-2 py-0.5 text-xs font-semibold text-ink">
+                Unmatched
+              </span>
+            )}
             <span className="inline-block rounded border border-marigold bg-marigold/20 px-2 py-0.5 text-xs font-medium text-ink">
               Simulated eLitmus verification (prototype)
             </span>
@@ -521,57 +699,107 @@ function MatchRow({
         </div>
       </div>
 
-      {/* Right: WavePair + breakdown + Open chat action */}
+      {/* Right: WavePair + breakdown + Open chat / Pass / Remove action */}
       <div className="flex w-full flex-col gap-3 md:w-72 md:shrink-0 md:items-stretch">
         <WavePair
           score={compatibilityScore}
           breakdown={breakdown}
           showDisclaimer
         />
-        <div className="flex gap-2">
-          <button
-            type="button"
-            aria-pressed={item.myAction === "like"}
-            onClick={() =>
-              onAction(item.myAction === "like" ? "clear" : "like")
-            }
-            className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
-              item.myAction === "like"
-                ? "border-teal bg-teal/20 text-dusk"
-                : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
-            }`}
-          >
-            {item.myAction === "like" ? "Liked" : "Like"}
-          </button>
-          <button
-            type="button"
-            aria-pressed={item.myAction === "save"}
-            onClick={() =>
-              onAction(item.myAction === "save" ? "clear" : "save")
-            }
-            className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
-              item.myAction === "save"
-                ? "border-marigold bg-marigold/25 text-ink"
-                : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
-            }`}
-          >
-            {item.myAction === "save" ? "Saved" : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onAction("pass")}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-ink/80 hover:bg-marigold/15"
-          >
-            Pass
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenChat}
-          className="inline-flex min-h-[44px] items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
-        >
-          Open chat
-        </button>
+
+        {item.unmatchedByPartner ? (
+          <div className="space-y-2">
+            <div className="rounded border border-marigold/60 bg-marigold/15 p-3 text-xs leading-relaxed text-ink">
+              <p className="font-semibold text-dusk">This match has ended.</p>
+              {getClosureReasonMessage(item.closureReason) && (
+                <p className="mt-1 font-serif">
+                  &ldquo;{getClosureReasonMessage(item.closureReason)}&rdquo;
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={onOpenChat}
+                className="inline-flex min-h-[44px] items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
+              >
+                Open chat (read-only)
+              </button>
+              <button
+                type="button"
+                onClick={() => onAction("dismiss_unmatched")}
+                className="inline-flex min-h-[44px] items-center justify-center rounded border border-dusk/30 bg-fog px-4 py-2 text-xs font-medium text-dusk hover:bg-dusk/10"
+              >
+                Remove from my list
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                aria-pressed={item.myAction === "like"}
+                onClick={() =>
+                  onAction(item.myAction === "like" ? "clear" : "like")
+                }
+                className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
+                  item.myAction === "like"
+                    ? "border-teal bg-teal/20 text-dusk"
+                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+                }`}
+              >
+                {item.myAction === "like" ? "Liked" : "Like"}
+              </button>
+              <button
+                type="button"
+                aria-pressed={item.myAction === "save"}
+                onClick={() =>
+                  onAction(item.myAction === "save" ? "clear" : "save")
+                }
+                className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
+                  item.myAction === "save"
+                    ? "border-marigold bg-marigold/25 text-ink"
+                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+                }`}
+              >
+                {item.myAction === "save" ? "Saved" : "Save"}
+              </button>
+            </div>
+
+            {!item.hasMessages ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onAction("pass")}
+                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded border border-dusk/25 bg-fog px-3 text-sm font-medium text-ink hover:bg-marigold/15"
+                >
+                  Pass
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenChat}
+                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
+                >
+                  Open chat
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={onOpenChat}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
+                >
+                  Open chat
+                </button>
+                <p className="text-[11px] leading-snug text-ink/70">
+                  To end this match, open the chat and choose Unmatch.
+                </p>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </article>
   );

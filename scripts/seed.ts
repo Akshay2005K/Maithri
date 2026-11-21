@@ -1016,6 +1016,28 @@ async function runSeed() {
     }
   }
 
+  // Seed one zero-message match between Aarav and Meera (for testing Pass & Undo)
+  const meeraId = idByEmail["meera@elitmus-demo.in"];
+  if (aaravId && meeraId) {
+    const { data: existingZeroMatch } = await supabaseAdmin
+      .from("matches")
+      .select("id")
+      .or(
+        `and(user_a.eq.${aaravId},user_b.eq.${meeraId}),and(user_a.eq.${meeraId},user_b.eq.${aaravId})`
+      )
+      .maybeSingle();
+
+    if (!existingZeroMatch) {
+      const { error: zeroErr } = await supabaseAdmin.from("matches").insert({
+        user_a: aaravId,
+        user_b: meeraId,
+        compatibility_score: 85,
+      });
+      if (zeroErr) throw zeroErr;
+      console.log("Seeded zero-message match between Aarav and Meera.");
+    }
+  }
+
   // Revoke any previously unmatched flags so all prior matches are restored
   const { error: revokeErr } = await supabaseAdmin
     .from("matches")
