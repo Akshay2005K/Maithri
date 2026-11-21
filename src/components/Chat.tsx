@@ -12,6 +12,7 @@ import {
   getProfileDetailChips,
 } from "@/lib/profileOptions";
 import { countWords, getUnblurStatus } from "@/lib/unblur";
+import type { CompatibilityBreakdown } from "@/lib/matching";
 import WavePair from "@/components/WavePair";
 
 interface MessageRow {
@@ -45,6 +46,7 @@ interface ChatProps {
   matchId: string;
   partner: SafePartnerProfile;
   compatibilityScore: number;
+  breakdown?: CompatibilityBreakdown;
   onBack: () => void;
   onBlocked: () => void;
 }
@@ -56,11 +58,85 @@ const REPORT_REASONS = [
   "Other / prefer not to match",
 ];
 
+const VENUE_SUGGESTIONS: Record<string, string[]> = {
+  Bengaluru: [
+    "Third Wave Coffee, Indiranagar",
+    "Cubbon Park morning walk",
+    "Champaca Bookstore, Vasanth Nagar",
+  ],
+  Hyderabad: [
+    "Roastery Coffee House, Banjara Hills",
+    "KBR Park walking trail",
+    "Lamakaan Cafe, Banjara Hills",
+  ],
+  Pune: [
+    "Third Wave Coffee, Koregaon Park",
+    "Pagdandi Bookstore Cafe, Baner",
+    "Vetal Tekdi morning walk",
+  ],
+  Mumbai: [
+    "Subko Coffee, Bandra",
+    "Kala Ghoda Cafe, Fort",
+    "Marine Drive evening walk",
+  ],
+  Chennai: [
+    "Amethyst Cafe, Royapettah",
+    "Beach walk at Besant Nagar",
+    "Writer's Cafe, Gopalapuram",
+  ],
+  NCR: [
+    "Blue Tokai, Khan Market",
+    "Lodhi Garden morning walk",
+    "Kunzum Travel Cafe, Hauz Khas",
+  ],
+};
+
+function detectSensitiveInfo(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (/(?:\+?91[\s-]?)?[6-9]\d{9}\b/.test(trimmed) || /\b\d{10,12}\b/.test(trimmed)) {
+    return "Looks like a phone or account number.";
+  }
+  if (/\b[\w.+-]+@(?:upi|okicici|okhdfcbank|okaxis|oksbi|ybl|ibl|axl|paytm)\b/i.test(trimmed)) {
+    return "Looks like a UPI ID.";
+  }
+  if (/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/.test(trimmed)) {
+    return "Looks like an email address.";
+  }
+  if (/\b(?:upi pin|bank account|ifsc|cvv|otp|send money|transfer money)\b/i.test(trimmed)) {
+    return "Mentions financial or verification details.";
+  }
+  return null;
+}
+
+function buildIcebreakers(
+  sharedInterests: string[],
+  partnerFirstName: string,
+  partnerCity: string
+): string[] {
+  const starters: string[] = [];
+  if (sharedInterests.length > 0) {
+    starters.push(
+      `Hey ${partnerFirstName}, I also enjoy ${sharedInterests[0]} — what got you into it?`
+    );
+  }
+  if (sharedInterests.length > 1) {
+    starters.push(
+      `Saw we both like ${sharedInterests[1]}! Any favourite spot or recent pick?`
+    );
+  }
+  starters.push(
+    `Your answer caught my eye — what does a good weekend in ${partnerCity} look like for you?`
+  );
+  return starters.slice(0, 3);
+}
+
 export default function Chat({
   currentUser,
   matchId,
   partner,
   compatibilityScore,
+  breakdown,
   onBack,
   onBlocked,
 }: ChatProps) {
@@ -73,6 +149,8 @@ export default function Chat({
   const [showReportBox, setShowReportBox] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
   const [blocking, setBlocking] = useState(false);
+  const [showUnmatchBox, setShowUnmatchBox] = useState(false);
+  const [unmatching, setUnmatching] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [selectedPromptKey, setSelectedPromptKey] = useState<string>("");
 
@@ -120,6 +198,14 @@ export default function Chat({
   const wordCount = countWords(draft);
   const partnerPrompts = Array.isArray(partner.prompts) ? partner.prompts : [];
   const partnerDetailChips = getProfileDetailChips(partner.details);
+  const partnerFirstName = partner.full_name.split(/\s+/)[0] || partner.full_name;
+  const sharedInterests = breakdown?.sharedInterests ?? [];
+  const icebreakers = buildIcebreakers(
+    sharedInterests,
+    partnerFirstName,
+    partner.city
+  );
+  const sensitiveWarning = detectSensitiveInfo(draft);
   const myPrompts = Array.isArray(currentUser.prompts)
     ? currentUser.prompts
     : [];
@@ -194,6 +280,40 @@ export default function Chat({
 
     if (blockErr) {
       setError(`${blockErr.message} Please try blocking again.`);
+      return;
+    }
+
+    onBlocked();
+  }
+
+  async function handleUnmatch() {
+    setError(null);
+    setUnmatching(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setError("No active session found. Sign in again and retry.");
+      setUnmatching(false);
+      return;
+    }
+
+    const res = await fetch("/api/unmatch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ matchId }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    setUnmatching(false);
+
+    if (!res.ok) {
+      setError(body.error || "Could not unmatch. Please try again.");
       return;
     }
 
@@ -419,7 +539,11 @@ export default function Chat({
             )}
 
             <div className="border-y border-dusk/15 py-3">
-              <WavePair score={compatibilityScore} />
+              <WavePair
+                score={compatibilityScore}
+                breakdown={breakdown}
+                showDisclaimer
+              />
             </div>
 
             {/* Unblur status */}
@@ -447,6 +571,11 @@ export default function Chat({
                   }`}
                 />
               </div>
+              <ul className="space-y-0.5 pt-1 text-[11px] text-ink/75">
+                <li>Level 1: Blurred until both write 4+ words</li>
+                <li>Level 2: Partially unblurred after both write</li>
+                <li>Level 3: Unblurred at 3+ valid messages total</li>
+              </ul>
             </div>
 
             {/* Plan a meetup (Available only at unblur Level 3) */}
@@ -509,6 +638,27 @@ export default function Chat({
               ) : (
                 <form onSubmit={handleCreatePlan} className="space-y-3">
                   <div>
+                    <p className="mb-1.5 text-[11px] font-medium text-ink/75">
+                      Public venue ideas in {partner.city}
+                    </p>
+                    <div className="mb-2.5 flex flex-wrap gap-1.5">
+                      {(
+                        VENUE_SUGGESTIONS[partner.city] ?? [
+                          `Popular cafe in ${partner.city}`,
+                          `Public bookstore or park in ${partner.city}`,
+                        ]
+                      ).map((idea) => (
+                        <button
+                          key={idea}
+                          type="button"
+                          onClick={() => setPlaceName(idea)}
+                          className="rounded-full border border-dusk/25 bg-fog px-2.5 py-1 text-[11px] text-ink hover:border-teal hover:bg-teal/10"
+                        >
+                          {idea}
+                        </button>
+                      ))}
+                    </div>
+
                     <label
                       htmlFor="plan-place"
                       className="block text-xs font-medium text-ink"
@@ -568,11 +718,54 @@ export default function Chat({
               )}
             </div>
 
-            {/* Report / Block */}
-            <div className="space-y-3 pt-1">
+            {/* Unmatch & Report / Block */}
+            <div className="space-y-2.5 pt-1">
               <button
                 type="button"
-                onClick={() => setShowReportBox(!showReportBox)}
+                onClick={() => {
+                  setShowUnmatchBox((prev) => !prev);
+                  setShowReportBox(false);
+                }}
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-4 text-sm font-medium text-dusk hover:bg-dusk/10"
+              >
+                {showUnmatchBox ? "Close unmatch" : "Unmatch"}
+              </button>
+
+              {showUnmatchBox && (
+                <div className="space-y-3 rounded-lg border border-dusk/25 bg-dusk/5 p-4 text-xs text-ink">
+                  <p className="text-sm font-semibold text-dusk">
+                    Unmatch with {partner.full_name}?
+                  </p>
+                  <p className="leading-relaxed text-ink/85">
+                    This removes the match and conversation for both people
+                    without filing a safety report.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={unmatching}
+                      onClick={handleUnmatch}
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded bg-dusk px-3 text-xs font-medium text-fog disabled:opacity-50"
+                    >
+                      {unmatching ? "Removing..." : "Confirm unmatch"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowUnmatchBox(false)}
+                      className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-ink"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReportBox(!showReportBox);
+                  setShowUnmatchBox(false);
+                }}
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded border border-dusk/25 bg-fog px-4 text-sm font-medium text-dusk hover:bg-marigold/20"
               >
                 {showReportBox ? "Close report options" : "Report and block"}
@@ -730,6 +923,44 @@ export default function Chat({
                   })}
                 </div>
               </fieldset>
+            )}
+
+            {isFirstMessage && icebreakers.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-dusk/15 bg-dusk/5 p-3">
+                <p className="text-xs font-semibold text-dusk">
+                  Suggested icebreakers{" "}
+                  {sharedInterests.length > 0
+                    ? `(based on shared interests)`
+                    : ""}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {icebreakers.map((starter) => (
+                    <button
+                      key={starter}
+                      type="button"
+                      onClick={() => {
+                        setDraft(starter);
+                        if (!selectedPromptKey && partnerPrompts.length > 0) {
+                          setSelectedPromptKey(partnerPrompts[0].key);
+                        }
+                      }}
+                      className="min-h-[40px] rounded-full border border-dusk/25 bg-fog px-3 py-1.5 text-left text-xs text-ink hover:border-teal hover:bg-teal/10"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {sensitiveWarning && (
+              <p
+                role="status"
+                className="rounded border border-marigold bg-marigold/20 p-2.5 text-xs font-medium text-ink"
+              >
+                Safety reminder: {sensitiveWarning} Keep personal contact or
+                financial details private until you feel comfortable.
+              </p>
             )}
 
             <div>

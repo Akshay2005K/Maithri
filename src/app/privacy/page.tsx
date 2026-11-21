@@ -121,10 +121,10 @@ export default function PrivacyPage() {
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">
               When signed in, you can permanently delete your account using{" "}
-              <strong>Delete my account</strong> at the bottom of the home page.
-              Deleting your account removes your Supabase Auth user and cascades
-              to delete your profile, matches, messages, and reports from
-              PostgreSQL.
+              <strong>Delete account</strong> inside{" "}
+              <strong>Menu → Profile</strong> (Edit profile). Deleting your
+              account removes your Supabase Auth user and cascades to delete your
+              profile, matches, messages, and reports from PostgreSQL.
             </p>
           </section>
 

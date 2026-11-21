@@ -64,8 +64,8 @@ src/
 ### A. Authentication & Session Handling (`AuthForm.tsx`, `src/lib/supabase.ts`, `src/app/page.tsx`)
 - Uses **Supabase Auth** (`supabase.auth.signUp` and `supabase.auth.signInWithPassword`) — no custom password hashes are stored in application tables.
 - The browser client (`src/lib/supabase.ts`) uses `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Supabase Auth stores the user's JWT session in browser `localStorage` and sends it automatically on every Postgres request so `auth.uid()` works inside RLS policies.
-- `page.tsx` checks `supabase.auth.getSession()` on load and subscribes to `supabase.auth.onAuthStateChange(...)`.
-- For evaluator convenience, email confirmation is disabled in Supabase Auth and `AuthForm.tsx` displays demo credentials with one-click fill buttons.
+- `page.tsx` checks `supabase.auth.getSession()` on load and subscribes to `supabase.auth.onAuthStateChange(...)`, requiring `email_confirmed_at` before granting access.
+- New signups verify their email with a 6–8 digit OTP code (`AuthForm.tsx`), while seeded demo accounts are pre-confirmed via `scripts/seed.ts` and shown with one-click fill buttons.
 
 ### B. Onboarding, 18+ Gate, DPDP Consent & Privacy Shield Setup (`Onboarding.tsx`)
 When a newly signed-in user has no row in `profiles` (or clicks **Edit Profile / Shield**), `Onboarding.tsx` collects and upserts:
@@ -154,7 +154,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, and `supabase/migrations_profile_settings.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, and `supabase/migrations_improvements.sql` in **SQL Editor**.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:

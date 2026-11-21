@@ -21,21 +21,34 @@ export default function PaywallModal({
     setError(null);
     setSaving(true);
 
-    const { data, error: dbErr } = await supabase
-      .from("profiles")
-      .update({ is_plus_mock: true })
-      .eq("id", profile.id)
-      .select()
-      .single();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    setSaving(false);
-
-    if (dbErr) {
-      setError(`${dbErr.message} Please try activating again.`);
+    if (!session?.access_token) {
+      setError("No active session found. Sign in again and retry.");
+      setSaving(false);
       return;
     }
 
-    onUnlocked(data as Profile);
+    const res = await fetch("/api/mock-plus", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    const body = await res.json().catch(() => ({}));
+    setSaving(false);
+
+    if (!res.ok || !body.profile) {
+      setError(
+        `${body.error || "Could not activate demo Plus."} Please try activating again.`
+      );
+      return;
+    }
+
+    onUnlocked(body.profile as Profile);
   }
 
   return (

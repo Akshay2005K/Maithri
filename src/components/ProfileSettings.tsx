@@ -140,6 +140,16 @@ export default function ProfileSettings({
       ? profile.details
       : {}
   );
+  const [isIncognito, setIsIncognito] = useState(Boolean(profile.is_incognito));
+  const [nonSmokerOnly, setNonSmokerOnly] = useState(
+    Boolean(profile.deal_breakers?.non_smoker_only)
+  );
+  const [minAgePref, setMinAgePref] = useState<string>(
+    profile.deal_breakers?.min_age ? String(profile.deal_breakers.min_age) : ""
+  );
+  const [maxAgePref, setMaxAgePref] = useState<string>(
+    profile.deal_breakers?.max_age ? String(profile.deal_breakers.max_age) : ""
+  );
 
   const [prompts, setPrompts] = useState<ProfilePrompt[]>(() => {
     const existing = Array.isArray(profile.prompts) ? profile.prompts : [];
@@ -279,6 +289,12 @@ export default function ProfileSettings({
         batch: Number(batch),
         hide_same_company: hideSameCompany,
         hide_same_college: hideSameCollege,
+        is_incognito: isIncognito,
+        deal_breakers: {
+          non_smoker_only: nonSmokerOnly,
+          min_age: minAgePref ? Math.max(18, Number(minAgePref)) : null,
+          max_age: maxAgePref ? Math.max(18, Number(maxAgePref)) : null,
+        },
         bio_prompt: bioPrompt.trim() || null,
         avatar_url: avatarUrl,
         relationship_goal: relationshipGoal,
@@ -624,14 +640,14 @@ export default function ProfileSettings({
                 htmlFor="prof-company-domain"
                 className="block text-sm font-medium text-ink"
               >
-                Company domain
+                Company domains (comma-separated)
               </label>
               <input
                 id="prof-company-domain"
                 type="text"
                 value={companyDomain}
                 onChange={(e) => setCompanyDomain(e.target.value)}
-                placeholder="e.g. flipkart.com"
+                placeholder="e.g. flipkart.com, myntra.com"
                 className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
               />
             </div>
@@ -641,14 +657,14 @@ export default function ProfileSettings({
                 htmlFor="prof-college"
                 className="block text-sm font-medium text-ink"
               >
-                College
+                Colleges (comma-separated)
               </label>
               <input
                 id="prof-college"
                 type="text"
                 value={collegeName}
                 onChange={(e) => setCollegeName(e.target.value)}
-                placeholder="e.g. NIT Trichy"
+                placeholder="e.g. NIT Trichy, IIM Bangalore"
                 className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
               />
             </div>
@@ -684,6 +700,79 @@ export default function ProfileSettings({
               />
               <span>Hide profiles from my college</span>
             </label>
+            <label
+              htmlFor="prof-incognito"
+              className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink"
+            >
+              <input
+                id="prof-incognito"
+                type="checkbox"
+                checked={isIncognito}
+                onChange={(e) => setIsIncognito(e.target.checked)}
+                className="h-5 w-5 shrink-0 accent-teal"
+              />
+              <span>
+                Incognito mode (hide me from new daily matches; existing matches
+                can still chat)
+              </span>
+            </label>
+          </div>
+
+          <div className="space-y-3 border-t border-dusk/15 pt-3">
+            <p className="text-xs font-semibold text-dusk">
+              Deal-breakers (optional)
+            </p>
+            <label
+              htmlFor="prof-non-smoker-only"
+              className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink"
+            >
+              <input
+                id="prof-non-smoker-only"
+                type="checkbox"
+                checked={nonSmokerOnly}
+                onChange={(e) => setNonSmokerOnly(e.target.checked)}
+                className="h-5 w-5 shrink-0 accent-teal"
+              />
+              <span>Exclude profiles marked as Smoker</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3 sm:max-w-xs">
+              <div>
+                <label
+                  htmlFor="prof-min-age"
+                  className="block text-xs font-medium text-ink/80"
+                >
+                  Min age (18+)
+                </label>
+                <input
+                  id="prof-min-age"
+                  type="number"
+                  min={18}
+                  max={99}
+                  placeholder="Any"
+                  value={minAgePref}
+                  onChange={(e) => setMinAgePref(e.target.value)}
+                  className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="prof-max-age"
+                  className="block text-xs font-medium text-ink/80"
+                >
+                  Max age
+                </label>
+                <input
+                  id="prof-max-age"
+                  type="number"
+                  min={18}
+                  max={99}
+                  placeholder="Any"
+                  value={maxAgePref}
+                  onChange={(e) => setMaxAgePref(e.target.value)}
+                  className="mt-1 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink"
+                />
+              </div>
+            </div>
           </div>
         </section>
 

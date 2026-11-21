@@ -8,17 +8,23 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 // Supabase Auth stores the user's JWT session in browser localStorage automatically.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type RelationshipGoal = "casual" | "open" | "long_term" | "marriage";
+export type RelationshipGoal =
+  | "friendship"
+  | "casual"
+  | "open"
+  | "long_term"
+  | "marriage";
 
 export const RELATIONSHIP_GOALS: {
   key: RelationshipGoal;
   label: string;
   order: number;
 }[] = [
-  { key: "casual", label: "Something casual", order: 0 },
-  { key: "open", label: "Open to see where it goes", order: 1 },
-  { key: "long_term", label: "A long-term relationship", order: 2 },
-  { key: "marriage", label: "Marriage", order: 3 },
+  { key: "friendship", label: "Friendship-first", order: 0 },
+  { key: "casual", label: "Something casual", order: 1 },
+  { key: "open", label: "Open to see where it goes", order: 2 },
+  { key: "long_term", label: "A long-term relationship", order: 3 },
+  { key: "marriage", label: "Marriage", order: 4 },
 ];
 
 export const PROMPT_KEYS = [
@@ -58,12 +64,20 @@ export interface SafePartnerProfile {
   details?: ProfileDetails | null;
 }
 
+export interface DealBreakers {
+  non_smoker_only?: boolean;
+  min_age?: number | null;
+  max_age?: number | null;
+}
+
 export interface Profile extends SafePartnerProfile {
   looking_for: string;
   company_domain: string | null;
   college_name: string | null;
   hide_same_company: boolean;
   hide_same_college: boolean;
+  is_incognito?: boolean;
+  deal_breakers?: DealBreakers | null;
   q1: number | null;
   q2: number | null;
   q3: number | null;

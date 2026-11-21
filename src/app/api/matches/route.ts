@@ -32,6 +32,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!user.email_confirmed_at) {
+      return NextResponse.json(
+        { error: "Verify your email before viewing matches." },
+        { status: 403 }
+      );
+    }
+
     const { data: myProfile, error: profileErr } = await supabaseAdmin
       .from("profiles")
       .select("*")

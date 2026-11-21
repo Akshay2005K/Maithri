@@ -22,8 +22,9 @@ export const INTERESTED_IN_OPTIONS: OptionItem<InterestedInValue>[] = [
 ];
 
 export const RELATIONSHIP_GOAL_OPTIONS: OptionItem<
-  "casual" | "open" | "long_term" | "marriage"
+  "friendship" | "casual" | "open" | "long_term" | "marriage"
 >[] = [
+  { value: "friendship", label: "Friendship-first" },
   { value: "casual", label: "Something casual" },
   { value: "open", label: "Open to see where it goes" },
   { value: "long_term", label: "A long-term relationship" },

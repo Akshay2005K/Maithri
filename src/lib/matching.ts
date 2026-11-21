@@ -7,11 +7,28 @@ import {
 } from "./supabase";
 import { getDisplayedAge } from "./profileOptions";
 
+export interface CompatibilityFactor {
+  key: "q1" | "q2" | "q3" | "q4" | "q5";
+  label: string;
+  score: number;
+}
+
+export interface CompatibilityBreakdown {
+  sharedInterests: string[];
+  cityLabel: string;
+  goalSummary: string;
+  factors: CompatibilityFactor[];
+}
+
+export type MatchUserAction = "like" | "pass" | "save" | null;
+
 export interface MatchWithProfile {
   matchId: string;
   compatibilityScore: number;
   matchDate: string;
   partner: SafePartnerProfile;
+  breakdown: CompatibilityBreakdown;
+  myAction?: MatchUserAction;
 }
 
 const GOAL_ORDER: Record<RelationshipGoal, number> = Object.fromEntries(
@@ -45,6 +62,20 @@ function toSafePartnerProfile(p: Profile): SafePartnerProfile {
   };
 }
 
+function parseCommaList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function listsOverlap(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  const setB = new Set(b);
+  return a.some((item) => setB.has(item));
+}
+
 // A candidate qualifies only if my interested-in includes their gender
 // AND their interested-in includes my gender ("everyone" matches all).
 export function doesInterestedInIncludeGender(
@@ -64,6 +95,60 @@ export function doesInterestedInIncludeGender(
     return normGender === "beyond_binary" || normGender === "other";
   }
   return false;
+}
+
+const QUIZ_FACTOR_LABELS: {
+  key: "q1" | "q2" | "q3" | "q4" | "q5";
+  label: string;
+}[] = [
+  { key: "q1", label: "Work-life rhythm" },
+  { key: "q2", label: "Weekend battery" },
+  { key: "q3", label: "Financial style" },
+  { key: "q4", label: "Conflict style" },
+  { key: "q5", label: "City flexibility" },
+];
+
+export function computeCompatibilityBreakdown(
+  a: Profile,
+  b: Profile
+): CompatibilityBreakdown {
+  const myInterests = Array.isArray(a.details?.interests)
+    ? a.details.interests
+    : [];
+  const theirInterests = new Set(
+    Array.isArray(b.details?.interests) ? b.details.interests : []
+  );
+  const sharedInterests = myInterests.filter((item) => theirInterests.has(item));
+
+  const cityLabel =
+    a.city === b.city
+      ? `Same city (${b.city})`
+      : `Nearby city (${b.city})`;
+
+  const goalDiff =
+    a.relationship_goal && b.relationship_goal
+      ? Math.abs(
+          GOAL_ORDER[a.relationship_goal] - GOAL_ORDER[b.relationship_goal]
+        )
+      : 0;
+  const goalSummary =
+    goalDiff === 0 ? "Same relationship goal" : "Compatible relationship goals";
+
+  const factors: CompatibilityFactor[] = QUIZ_FACTOR_LABELS.map((item) => {
+    const diff = Math.abs((a[item.key] ?? 3) - (b[item.key] ?? 3));
+    return {
+      key: item.key,
+      label: item.label,
+      score: Math.round(100 - (diff / 4) * 100),
+    };
+  });
+
+  return {
+    sharedInterests,
+    cityLabel,
+    goalSummary,
+    factors,
+  };
 }
 
 // 100 minus the average absolute difference across q1..q5, scaled from [0..4] to [0..100].
@@ -120,15 +205,27 @@ export async function getOrCreateTodaysMatchesForUser(
     (allProfiles ?? []).map((p) => [p.id, p as Profile])
   );
 
-  // Enforce the daily cap (3/day, or 4/day with Plus) by counting today's rows
-  const activeExisting = (existingMatches ?? []).filter(
-    (m) => !blockedIds.has(m.user_a === me.id ? m.user_b : m.user_a)
-  );
+  // Enforce the daily cap (3/day, or 4/day with Plus) by counting all rows created today
+  // (including unmatched ones so unmatching cannot bypass the daily cap),
+  // while displaying only non-blocked, non-unmatched matches.
+  const activeExisting = (existingMatches ?? []).filter((m) => {
+    if (m.unmatched_at) return false;
+    if (blockedIds.has(m.user_a === me.id ? m.user_b : m.user_a)) return false;
+    const actionMap =
+      m.action_state && typeof m.action_state === "object"
+        ? (m.action_state as Record<string, string>)
+        : {};
+    if (actionMap[me.id] === "pass") return false;
+    return true;
+  });
+  const todaysCreatedCount = (existingMatches ?? []).filter(
+    (m) => m.match_date === today
+  ).length;
   const todaysRows = activeExisting.filter((m) => m.match_date === today);
   const earlierRows = activeExisting.filter((m) => m.match_date !== today);
 
   const dailyCap = me.is_plus_mock ? 4 : 3;
-  const slotsNeeded = Math.max(0, dailyCap - todaysRows.length);
+  const slotsNeeded = Math.max(0, dailyCap - todaysCreatedCount);
 
   // Filter eligible candidates & count Privacy Shield removals
   let hiddenByShieldCount = 0;
@@ -137,7 +234,39 @@ export async function getOrCreateTodaysMatchesForUser(
 
   for (const candidate of (allProfiles ?? []) as Profile[]) {
     if (candidate.id === me.id) continue;
+    if (candidate.is_incognito) continue;
     if (blockedIds.has(candidate.id)) continue;
+
+    // Deal-breakers check (bidirectional)
+    const candidateAge = getDisplayedAge(candidate);
+    const myAge = getDisplayedAge(me);
+    const myBreakers = me.deal_breakers ?? {};
+    const theirBreakers = candidate.deal_breakers ?? {};
+
+    if (
+      myBreakers.non_smoker_only &&
+      candidate.details?.smoking === "smoker"
+    ) {
+      continue;
+    }
+    if (
+      theirBreakers.non_smoker_only &&
+      me.details?.smoking === "smoker"
+    ) {
+      continue;
+    }
+    if (typeof myBreakers.min_age === "number" && candidateAge < myBreakers.min_age) {
+      continue;
+    }
+    if (typeof myBreakers.max_age === "number" && candidateAge > myBreakers.max_age) {
+      continue;
+    }
+    if (typeof theirBreakers.min_age === "number" && myAge < theirBreakers.min_age) {
+      continue;
+    }
+    if (typeof theirBreakers.max_age === "number" && myAge > theirBreakers.max_age) {
+      continue;
+    }
 
     // Mutual gender / interested-in check + same/nearby city check
     if (
@@ -148,13 +277,15 @@ export async function getOrCreateTodaysMatchesForUser(
     }
     if (!allowedCities.includes(candidate.city)) continue;
 
-    // Privacy Shield: hide same company domain or same college
-    const sameCompany =
-      Boolean(me.company_domain && candidate.company_domain) &&
-      me.company_domain!.toLowerCase() === candidate.company_domain!.toLowerCase();
-    const sameCollege =
-      Boolean(me.college_name && candidate.college_name) &&
-      me.college_name!.toLowerCase() === candidate.college_name!.toLowerCase();
+    // Privacy Shield: hide same company domain(s) or same college(s) (comma-separated)
+    const sameCompany = listsOverlap(
+      parseCommaList(me.company_domain),
+      parseCommaList(candidate.company_domain)
+    );
+    const sameCollege = listsOverlap(
+      parseCommaList(me.college_name),
+      parseCommaList(candidate.college_name)
+    );
 
     const hiddenByMyShield =
       (me.hide_same_company && sameCompany) ||
@@ -208,15 +339,26 @@ export async function getOrCreateTodaysMatchesForUser(
 
   const toMatchWithProfile = (rows: typeof todaysRows): MatchWithProfile[] =>
     rows
-      .map((m) => {
+      .map((m): MatchWithProfile | null => {
         const partnerId = m.user_a === me.id ? m.user_b : m.user_a;
         const partner = profileMap.get(partnerId);
         if (!partner) return null;
+        const actionMap =
+          m.action_state && typeof m.action_state === "object"
+            ? (m.action_state as Record<string, string>)
+            : {};
+        const rawAction = actionMap[me.id];
+        const myAction: MatchUserAction =
+          rawAction === "like" || rawAction === "pass" || rawAction === "save"
+            ? rawAction
+            : null;
         return {
           matchId: m.id,
           compatibilityScore: m.compatibility_score,
           matchDate: m.match_date,
           partner: toSafePartnerProfile(partner),
+          breakdown: computeCompatibilityBreakdown(me, partner),
+          myAction,
         };
       })
       .filter((item): item is MatchWithProfile => item !== null)

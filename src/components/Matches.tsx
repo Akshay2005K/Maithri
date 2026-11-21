@@ -103,6 +103,38 @@ export default function Matches({
     };
   }, [profile]);
 
+  async function handleMatchAction(
+    matchId: string,
+    action: "like" | "pass" | "save" | "clear"
+  ) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+
+    const res = await fetch("/api/match-action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ matchId, action }),
+    });
+    if (!res.ok) return;
+
+    const updateList = (list: MatchWithProfile[]) =>
+      action === "pass"
+        ? list.filter((m) => m.matchId !== matchId)
+        : list.map((m) =>
+            m.matchId === matchId
+              ? { ...m, myAction: action === "clear" ? null : action }
+              : m
+          );
+
+    setTodaysMatches((prev) => updateList(prev));
+    setEarlierMatches((prev) => updateList(prev));
+  }
+
   if (loading) {
     return (
       <div className="border-t border-dusk/15 py-8 text-left text-sm text-ink/80">
@@ -127,16 +159,22 @@ export default function Matches({
 
       {/* Privacy Shield Status */}
       <div className="rounded-lg border border-teal/40 bg-teal/10 px-4 py-3 text-sm text-ink">
-        <strong>Privacy Shield:</strong> {hiddenCount}{" "}
-        {hiddenCount === 1 ? "profile" : "profiles"} hidden by your Privacy
-        Shield
-        {profile.hide_same_company && profile.company_domain
-          ? ` (company: ${profile.company_domain})`
-          : ""}
-        {profile.hide_same_college && profile.college_name
-          ? ` (college: ${profile.college_name})`
-          : ""}
-        .
+        <p>
+          <strong>Privacy Shield:</strong> {hiddenCount}{" "}
+          {hiddenCount === 1 ? "profile" : "profiles"} hidden by your Privacy
+          Shield
+          {profile.hide_same_company && profile.company_domain
+            ? ` (company: ${profile.company_domain})`
+            : ""}
+          {profile.hide_same_college && profile.college_name
+            ? ` (college: ${profile.college_name})`
+            : ""}
+          .
+        </p>
+        <p className="mt-1 text-xs text-ink/75">
+          Company and college affiliations are self-declared and cannot be
+          independently verified.
+        </p>
       </div>
 
       {profile.is_plus_mock && (
@@ -182,6 +220,7 @@ export default function Matches({
               item={item}
               unblur={unblurByMatch[item.matchId]}
               onOpenChat={() => onOpenChat(item)}
+              onAction={(action) => handleMatchAction(item.matchId, action)}
             />
           ))}
         </div>
@@ -200,6 +239,7 @@ export default function Matches({
                 item={item}
                 unblur={unblurByMatch[item.matchId]}
                 onOpenChat={() => onOpenChat(item)}
+                onAction={(action) => handleMatchAction(item.matchId, action)}
               />
             ))}
           </div>
@@ -250,18 +290,24 @@ function MatchRow({
   item,
   unblur,
   onOpenChat,
+  onAction,
 }: {
   item: MatchWithProfile;
   unblur?: UnblurStatus;
   onOpenChat: () => void;
+  onAction: (action: "like" | "pass" | "save" | "clear") => void;
 }) {
-  const { partner, compatibilityScore } = item;
+  const { partner, compatibilityScore, breakdown } = item;
   const blurClass = unblur?.blurClass ?? "blur-xl";
   const level = unblur?.level ?? 1;
   const detailChips = getProfileDetailChips(partner.details);
+  const [showPrompts, setShowPrompts] = useState(false);
+  const [showAllChips, setShowAllChips] = useState(false);
+  const visibleChips = showAllChips ? detailChips : detailChips.slice(0, 5);
+  const hasMoreChips = detailChips.length > 5;
 
   return (
-    <article className="flex flex-col gap-5 py-6 md:flex-row md:items-center md:justify-between">
+    <article className="flex flex-col gap-6 py-6 md:flex-row md:items-start md:justify-between">
       {/* Left: Avatar + Identity + Bio */}
       <div className="flex min-w-0 flex-1 items-start gap-4">
         <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-dusk/25 bg-dusk/10">
@@ -308,9 +354,9 @@ function MatchRow({
           {detailChips.length > 0 && (
             <div
               aria-label="Profile details and interests"
-              className="flex flex-wrap gap-1.5 pt-1"
+              className="flex flex-wrap items-center gap-1.5 pt-1"
             >
-              {detailChips.map((chip) => (
+              {visibleChips.map((chip) => (
                 <span
                   key={chip.key}
                   className="inline-block rounded-full border border-dusk/25 bg-dusk/5 px-2.5 py-0.5 text-xs font-medium text-ink"
@@ -318,24 +364,50 @@ function MatchRow({
                   {chip.label}
                 </span>
               ))}
+              {hasMoreChips && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllChips((prev) => !prev)}
+                  className="inline-flex min-h-[32px] items-center rounded-full px-2 text-xs font-medium text-dusk underline decoration-teal underline-offset-4 hover:bg-dusk/5"
+                >
+                  {showAllChips
+                    ? "Show fewer"
+                    : `+${detailChips.length - 5} more`}
+                </button>
+              )}
             </div>
           )}
 
           {Array.isArray(partner.prompts) && partner.prompts.length > 0 && (
-            <div className="space-y-2 pt-2">
-              {partner.prompts.map((prompt) => (
-                <div
-                  key={prompt.key}
-                  className="rounded border border-dusk/15 bg-dusk/5 px-3 py-2"
-                >
-                  <p className="text-xs font-semibold text-dusk">
-                    {prompt.key}
-                  </p>
-                  <p className="mt-0.5 font-serif text-sm leading-relaxed text-ink/90">
-                    {prompt.answer}
-                  </p>
+            <div className="pt-1.5">
+              <button
+                type="button"
+                aria-expanded={showPrompts}
+                onClick={() => setShowPrompts((prev) => !prev)}
+                className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-dusk hover:bg-dusk/5"
+              >
+                {showPrompts
+                  ? "Hide prompts"
+                  : `Read ${partner.prompts.length} prompts`}
+              </button>
+
+              {showPrompts && (
+                <div className="mt-2 space-y-2">
+                  {partner.prompts.map((prompt) => (
+                    <div
+                      key={prompt.key}
+                      className="rounded border border-dusk/15 bg-dusk/5 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold text-dusk">
+                        {prompt.key}
+                      </p>
+                      <p className="mt-0.5 font-serif text-sm leading-relaxed text-ink/90">
+                        {prompt.answer}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -345,13 +417,54 @@ function MatchRow({
         </div>
       </div>
 
-      {/* Right: WavePair + Open chat action */}
-      <div className="flex flex-wrap items-center justify-between gap-4 md:shrink-0 md:flex-col md:items-end">
-        <WavePair score={compatibilityScore} />
+      {/* Right: WavePair + breakdown + Open chat action */}
+      <div className="flex w-full flex-col gap-3 md:w-72 md:shrink-0 md:items-stretch">
+        <WavePair
+          score={compatibilityScore}
+          breakdown={breakdown}
+          showDisclaimer
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            aria-pressed={item.myAction === "like"}
+            onClick={() =>
+              onAction(item.myAction === "like" ? "clear" : "like")
+            }
+            className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
+              item.myAction === "like"
+                ? "border-teal bg-teal/20 text-dusk"
+                : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+            }`}
+          >
+            {item.myAction === "like" ? "Liked" : "Like"}
+          </button>
+          <button
+            type="button"
+            aria-pressed={item.myAction === "save"}
+            onClick={() =>
+              onAction(item.myAction === "save" ? "clear" : "save")
+            }
+            className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
+              item.myAction === "save"
+                ? "border-marigold bg-marigold/25 text-ink"
+                : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+            }`}
+          >
+            {item.myAction === "save" ? "Saved" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction("pass")}
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-ink/80 hover:bg-marigold/15"
+          >
+            Pass
+          </button>
+        </div>
         <button
           type="button"
           onClick={onOpenChat}
-          className="inline-flex min-h-[44px] items-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
+          className="inline-flex min-h-[44px] items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
         >
           Open chat
         </button>

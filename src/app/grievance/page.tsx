@@ -61,9 +61,10 @@ export default function GrievancePage() {
               </li>
               <li>
                 <strong>Data deletion:</strong> Use{" "}
-                <strong>Delete my account</strong> at the bottom of the home
-                page when signed in to erase your auth user, profile, matches,
-                messages, and reports immediately.
+                <strong>Delete account</strong> inside{" "}
+                <strong>Menu → Profile</strong> (Edit profile) when signed in
+                to erase your auth user, profile, matches, messages, and reports
+                immediately.
               </li>
             </ul>
           </section>

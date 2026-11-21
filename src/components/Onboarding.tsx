@@ -557,14 +557,14 @@ export default function Onboarding({
                 htmlFor="onb-company-domain"
                 className="block text-sm font-medium text-ink"
               >
-                Company domain
+                Company domains (comma-separated)
               </label>
               <input
                 id="onb-company-domain"
                 type="text"
                 value={companyDomain}
                 onChange={(e) => setCompanyDomain(e.target.value)}
-                placeholder="e.g. flipkart.com"
+                placeholder="e.g. flipkart.com, myntra.com"
                 className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
               />
             </div>
@@ -574,14 +574,14 @@ export default function Onboarding({
                 htmlFor="onb-college"
                 className="block text-sm font-medium text-ink"
               >
-                College
+                Colleges (comma-separated)
               </label>
               <input
                 id="onb-college"
                 type="text"
                 value={collegeName}
                 onChange={(e) => setCollegeName(e.target.value)}
-                placeholder="e.g. NIT Trichy"
+                placeholder="e.g. NIT Trichy, IIM Bangalore"
                 className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
               />
             </div>

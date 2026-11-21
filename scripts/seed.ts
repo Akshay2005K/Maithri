@@ -31,7 +31,12 @@ interface SeedUser {
   hide_same_college: boolean;
   bio_prompt: string;
   avatar_url: string;
-  relationship_goal: "casual" | "open" | "long_term" | "marriage";
+  relationship_goal:
+    | "friendship"
+    | "casual"
+    | "open"
+    | "long_term"
+    | "marriage";
   prompts: { key: string; answer: string }[];
   details: Record<string, unknown>;
   q1: number;
@@ -756,6 +761,145 @@ const SEED_USERS: SeedUser[] = [
   },
 ];
 
+const MALE_NAMES = [
+  "Aditya Menon", "Rishabh Gupta", "Pranav Kulkarni", "Karan Malhotra", "Nikhil Reddy",
+  "Harshvardhan Joshi", "Varun Iyer", "Siddhant Kapoor", "Gaurav Nair", "Abhishek Verma",
+  "Tanmay Deshmukh", "Shubham Agarwal", "Akash Chatterjee", "Yashwant Rao", "Manish Tiwari",
+  "Chirag Bansal", "Anirudh Krishnan", "Kunal Saxena", "Deepak Choudhary", "Saurabh Mishra",
+  "Vivek Shetty", "Rajat Khanna", "Mayank Sinha", "Ashwin Hegde", "Nitin Kulkarni",
+];
+
+const FEMALE_NAMES = [
+  "Aditi Rao", "Ishita Sharma", "Kavya Nair", "Nandini Iyer", "Pooja Deshmukh",
+  "Roshni Menon", "Shruti Kulkarni", "Tanvi Joshi", "Vaishnavi Reddy", "Zoya Khan",
+  "Bhavna Gupta", "Charu Malhotra", "Diya Chatterjee", "Esha Verma", "Gauri Bansal",
+  "Himani Tiwari", "Jhanvi Kapoor", "Komal Agarwal", "Lavanya Krishnan", "Mansi Saxena",
+  "Niharika Sinha", "Ojaswi Hegde", "Pallavi Mishra", "Radhika Shetty", "Swati Khanna",
+];
+
+const CITIES = ["Bengaluru", "Bengaluru", "Bengaluru", "Hyderabad", "Pune", "Chennai", "Mumbai", "NCR"];
+const ROLES = ["Software Engineer", "Product Analyst", "Backend Developer", "Frontend Engineer", "Data Analyst", "UX Designer", "QA Engineer", "Cloud Engineer"];
+const COMPANIES = ["infosys.com", "tcs.com", "zoho.com", "freshworks.com", "postman.com", "razorpay.com", "cred.club", "swiggy.in"];
+const COLLEGES = ["NIT Trichy", "VIT Vellore", "BITS Pilani", "RVCE Bengaluru", "IIIT Hyderabad", "COEP Pune", "SRM Chennai", "DTU Delhi"];
+const GOALS: SeedUser["relationship_goal"][] = ["long_term", "open", "marriage", "casual", "friendship"];
+const INTEREST_POOL = [
+  "Filter coffee", "Reading", "Badminton", "Trekking", "Cooking", "Music",
+  "Photography", "Board games", "Cycling", "Movies", "Side projects", "Street food",
+  "Fitness", "Travel", "Stand-up comedy", "Podcasts", "Cricket", "Art",
+];
+
+function buildExtraUsers(): SeedUser[] {
+  const extras: SeedUser[] = [];
+
+  for (let i = 0; i < 25; i++) {
+    const city = CITIES[i % CITIES.length];
+    const birthYear = 1998 + (i % 6);
+    const goal = GOALS[i % GOALS.length];
+    extras.push({
+      email: `demo-m${i + 1}@elitmus-demo.in`,
+      full_name: MALE_NAMES[i],
+      age: 2026 - birthYear,
+      birth_date: `${birthYear}-0${(i % 9) + 1}-1${i % 9}`,
+      gender: "man",
+      looking_for: i % 5 === 0 ? "everyone" : "women",
+      city,
+      role_title: ROLES[i % ROLES.length],
+      company_domain: COMPANIES[i % COMPANIES.length],
+      college_name: COLLEGES[i % COLLEGES.length],
+      batch: 2020 + (i % 5),
+      hide_same_company: true,
+      hide_same_college: false,
+      bio_prompt: `${2020 + (i % 5)} grad in ${city}. Into ${INTEREST_POOL[i % INTEREST_POOL.length].toLowerCase()} and unhurried conversations.`,
+      avatar_url: `/avatars/avatar-${(i % 6) + 1}.svg`,
+      relationship_goal: goal,
+      prompts: [
+        {
+          key: "A perfect Sunday",
+          answer: `Morning coffee in ${city}, a bit of ${INTEREST_POOL[i % INTEREST_POOL.length].toLowerCase()}, and good company.`,
+        },
+        {
+          key: "A small thing I care about",
+          answer: "Being punctual, honest, and present during real conversations.",
+        },
+      ],
+      details: {
+        open_to: goal === "casual" ? "figuring_it_out" : "monogamy",
+        languages: ["English", "Hindi"],
+        education: i % 3 === 0 ? "masters" : "bachelors",
+        drinking: i % 2 === 0 ? "socially" : "not_for_me",
+        smoking: "non_smoker",
+        workout: i % 2 === 0 ? "often" : "sometimes",
+        interests: [
+          INTEREST_POOL[i % INTEREST_POOL.length],
+          INTEREST_POOL[(i + 3) % INTEREST_POOL.length],
+          INTEREST_POOL[(i + 6) % INTEREST_POOL.length],
+        ],
+      },
+      q1: 2 + (i % 4),
+      q2: 2 + ((i + 1) % 4),
+      q3: 2 + ((i + 2) % 4),
+      q4: 3 + (i % 3),
+      q5: 2 + ((i + 1) % 4),
+    });
+  }
+
+  for (let i = 0; i < 25; i++) {
+    const city = CITIES[i % CITIES.length];
+    const birthYear = 1998 + (i % 6);
+    const goal = GOALS[i % GOALS.length];
+    extras.push({
+      email: `demo-f${i + 1}@elitmus-demo.in`,
+      full_name: FEMALE_NAMES[i],
+      age: 2026 - birthYear,
+      birth_date: `${birthYear}-0${(i % 9) + 1}-2${i % 8}`,
+      gender: "woman",
+      looking_for: i % 5 === 0 ? "everyone" : "men",
+      city,
+      role_title: ROLES[(i + 2) % ROLES.length],
+      company_domain: COMPANIES[(i + 3) % COMPANIES.length],
+      college_name: COLLEGES[(i + 2) % COLLEGES.length],
+      batch: 2020 + (i % 5),
+      hide_same_company: true,
+      hide_same_college: false,
+      bio_prompt: `${2020 + (i % 5)} batch in ${city}. Enjoys ${INTEREST_POOL[(i + 2) % INTEREST_POOL.length].toLowerCase()} and thoughtful weekend plans.`,
+      avatar_url: `/avatars/avatar-${((i + 2) % 6) + 1}.svg`,
+      relationship_goal: goal,
+      prompts: [
+        {
+          key: "My ideal first date",
+          answer: `Filter coffee or a quiet walk in ${city} where we can actually talk.`,
+        },
+        {
+          key: "I'm happiest when",
+          answer: `Spending a relaxed afternoon with ${INTEREST_POOL[(i + 2) % INTEREST_POOL.length].toLowerCase()} and no rush.`,
+        },
+      ],
+      details: {
+        open_to: goal === "casual" ? "figuring_it_out" : "monogamy",
+        languages: ["English", "Hindi"],
+        education: i % 4 === 0 ? "masters" : "bachelors",
+        drinking: i % 2 === 0 ? "special_occasions" : "socially",
+        smoking: "non_smoker",
+        workout: i % 2 === 0 ? "often" : "sometimes",
+        interests: [
+          INTEREST_POOL[(i + 2) % INTEREST_POOL.length],
+          INTEREST_POOL[(i + 5) % INTEREST_POOL.length],
+          INTEREST_POOL[(i + 8) % INTEREST_POOL.length],
+        ],
+      },
+      q1: 2 + ((i + 1) % 4),
+      q2: 2 + (i % 4),
+      q3: 3 + (i % 3),
+      q4: 2 + ((i + 2) % 4),
+      q5: 3 + (i % 3),
+    });
+  }
+
+  return extras;
+}
+
+const ALL_SEED_USERS: SeedUser[] = [...SEED_USERS, ...buildExtraUsers()];
+
 async function runSeed() {
   const supabaseAdmin = createAdminClient();
   const now = new Date().toISOString();
@@ -770,7 +914,7 @@ async function runSeed() {
     existingList.users.map((u) => [u.email?.toLowerCase() ?? "", u.id])
   );
 
-  for (const user of SEED_USERS) {
+  for (const user of ALL_SEED_USERS) {
     let userId = existingByEmail.get(user.email.toLowerCase());
 
     if (!userId) {
@@ -872,7 +1016,18 @@ async function runSeed() {
     }
   }
 
-  console.log("Seed complete!");
+  // Revoke any previously unmatched flags so all prior matches are restored
+  const { error: revokeErr } = await supabaseAdmin
+    .from("matches")
+    .update({ unmatched_at: null, unmatched_by: null })
+    .not("unmatched_at", "is", null);
+  if (revokeErr) {
+    console.warn("Note: could not revoke unmatched_at (ensure migrations_improvements.sql is run):", revokeErr.message);
+  } else {
+    console.log("Revoked any previously unmatched profiles.");
+  }
+
+  console.log(`Seed complete! (${ALL_SEED_USERS.length} users processed)`);
 }
 
 runSeed().catch((err) => {
