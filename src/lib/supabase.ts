@@ -48,6 +48,12 @@ export function getRelationshipGoalLabel(
   return RELATIONSHIP_GOALS.find((g) => g.key === goal)?.label ?? null;
 }
 
+export interface PhotoPaths {
+  blur1: string;
+  blur2: string;
+  full: string;
+}
+
 export interface SafePartnerProfile {
   id: string;
   full_name: string;
@@ -59,6 +65,8 @@ export interface SafePartnerProfile {
   batch: number | null;
   bio_prompt: string | null;
   avatar_url: string | null;
+  has_uploaded_photo?: boolean;
+  voice_intro_url?: string | null;
   relationship_goal: RelationshipGoal | null;
   prompts: ProfilePrompt[] | null;
   details?: ProfileDetails | null;
@@ -78,6 +86,8 @@ export interface Profile extends SafePartnerProfile {
   hide_same_college: boolean;
   is_incognito?: boolean;
   deal_breakers?: DealBreakers | null;
+  photo_paths?: PhotoPaths | null;
+  voice_intro_path?: string | null;
   q1: number | null;
   q2: number | null;
   q3: number | null;

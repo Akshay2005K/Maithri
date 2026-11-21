@@ -22,6 +22,11 @@ interface MatchesProps {
   onProfileUpdated: (updated: Profile) => void;
 }
 
+interface LastMessagePreview {
+  content: string;
+  isMine: boolean;
+}
+
 export default function Matches({
   profile,
   onEditProfile,
@@ -33,6 +38,10 @@ export default function Matches({
   const [unblurByMatch, setUnblurByMatch] = useState<Record<string, UnblurStatus>>(
     {}
   );
+  const [lastMessageByMatch, setLastMessageByMatch] = useState<
+    Record<string, LastMessagePreview>
+  >({});
+  const [filterMode, setFilterMode] = useState<"all" | "like" | "save">("all");
   const [hiddenCount, setHiddenCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -72,15 +81,24 @@ export default function Matches({
         ];
 
         const statusMap: Record<string, UnblurStatus> = {};
+        const lastMsgMap: Record<string, LastMessagePreview> = {};
         if (allMatchIds.length > 0) {
           const { data: msgRows } = await supabase
             .from("messages")
-            .select("match_id, sender_id, content")
-            .in("match_id", allMatchIds);
+            .select("match_id, sender_id, content, created_at")
+            .in("match_id", allMatchIds)
+            .order("created_at", { ascending: true });
 
           for (const id of allMatchIds) {
             const matchMsgs = (msgRows ?? []).filter((m) => m.match_id === id);
             statusMap[id] = getUnblurStatus(matchMsgs);
+            const latest = matchMsgs[matchMsgs.length - 1];
+            if (latest) {
+              lastMsgMap[id] = {
+                content: latest.content,
+                isMine: latest.sender_id === profile.id,
+              };
+            }
           }
         }
 
@@ -88,6 +106,7 @@ export default function Matches({
         setTodaysMatches(todays);
         setEarlierMatches(earlier);
         setUnblurByMatch(statusMap);
+        setLastMessageByMatch(lastMsgMap);
         setHiddenCount(result.hiddenByShieldCount);
         setHasMore(result.hasMoreCandidates);
       } catch (err) {
@@ -143,6 +162,18 @@ export default function Matches({
     );
   }
 
+  const allMatchesCombined = [...todaysMatches, ...earlierMatches];
+  const likedCount = allMatchesCombined.filter((m) => m.myAction === "like").length;
+  const savedCount = allMatchesCombined.filter((m) => m.myAction === "save").length;
+
+  const applyFilter = (list: MatchWithProfile[]) =>
+    filterMode === "all"
+      ? list
+      : list.filter((m) => m.myAction === filterMode);
+
+  const visibleTodays = applyFilter(todaysMatches);
+  const visibleEarlier = applyFilter(earlierMatches);
+
   return (
     <section className="space-y-6">
       {/* Page Header */}
@@ -184,6 +215,40 @@ export default function Matches({
         </div>
       )}
 
+      {/* Filter pills: All / Liked / Saved */}
+      {allMatchesCombined.length > 0 && (
+        <div
+          role="group"
+          aria-label="Filter matches"
+          className="flex flex-wrap gap-2"
+        >
+          {(
+            [
+              { key: "all", label: `All (${allMatchesCombined.length})` },
+              { key: "like", label: `Liked (${likedCount})` },
+              { key: "save", label: `Saved (${savedCount})` },
+            ] as const
+          ).map((tab) => {
+            const active = filterMode === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setFilterMode(tab.key)}
+                className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-medium transition-colors ${
+                  active
+                    ? "border-teal bg-dusk text-fog"
+                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {error && (
         <p
           role="alert"
@@ -194,31 +259,37 @@ export default function Matches({
       )}
 
       {/* Full-width vertical list of matches */}
-      {todaysMatches.length === 0 ? (
+      {visibleTodays.length === 0 ? (
         <div className="rounded-lg border border-dusk/20 bg-dusk/5 p-6 text-left">
           <p className="text-sm text-ink">
-            No eligible matches found right now in {profile.city} or nearby
-            cities.
+            {filterMode !== "all"
+              ? `No ${filterMode === "like" ? "liked" : "saved"} matches in today's list.`
+              : `No eligible matches found right now in ${profile.city} or nearby cities.`}
           </p>
-          <p className="mt-1 text-sm text-ink/80">
-            Update your looking-for preferences, city, or Privacy Shield
-            settings to expand today&apos;s pool.
-          </p>
-          <button
-            type="button"
-            onClick={onEditProfile}
-            className="mt-4 inline-flex min-h-[44px] items-center rounded bg-dusk px-4 text-sm font-medium text-fog hover:bg-dusk/90"
-          >
-            Update profile preferences
-          </button>
+          {filterMode === "all" && (
+            <>
+              <p className="mt-1 text-sm text-ink/80">
+                Update your looking-for preferences, city, or Privacy Shield
+                settings to expand today&apos;s pool.
+              </p>
+              <button
+                type="button"
+                onClick={onEditProfile}
+                className="mt-4 inline-flex min-h-[44px] items-center rounded bg-dusk px-4 text-sm font-medium text-fog hover:bg-dusk/90"
+              >
+                Update profile preferences
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="divide-y divide-dusk/15 border-y border-dusk/15">
-          {todaysMatches.map((item) => (
+          {visibleTodays.map((item) => (
             <MatchRow
               key={item.matchId}
               item={item}
               unblur={unblurByMatch[item.matchId]}
+              lastMessage={lastMessageByMatch[item.matchId]}
               onOpenChat={() => onOpenChat(item)}
               onAction={(action) => handleMatchAction(item.matchId, action)}
             />
@@ -227,17 +298,18 @@ export default function Matches({
       )}
 
       {/* Earlier Active Matches */}
-      {earlierMatches.length > 0 && (
+      {visibleEarlier.length > 0 && (
         <div className="space-y-3 pt-4">
           <h2 className="text-lg font-semibold text-dusk">
             Previous active matches
           </h2>
           <div className="divide-y divide-dusk/15 border-y border-dusk/15">
-            {earlierMatches.map((item) => (
+            {visibleEarlier.map((item) => (
               <MatchRow
                 key={item.matchId}
                 item={item}
                 unblur={unblurByMatch[item.matchId]}
+                lastMessage={lastMessageByMatch[item.matchId]}
                 onOpenChat={() => onOpenChat(item)}
                 onAction={(action) => handleMatchAction(item.matchId, action)}
               />
@@ -289,11 +361,13 @@ export default function Matches({
 function MatchRow({
   item,
   unblur,
+  lastMessage,
   onOpenChat,
   onAction,
 }: {
   item: MatchWithProfile;
   unblur?: UnblurStatus;
+  lastMessage?: LastMessagePreview;
   onOpenChat: () => void;
   onAction: (action: "like" | "pass" | "save" | "clear") => void;
 }) {
@@ -349,6 +423,20 @@ function MatchRow({
             <p className="pt-1 font-serif text-sm leading-relaxed text-ink/90">
               &ldquo;{partner.bio_prompt}&rdquo;
             </p>
+          )}
+
+          {partner.voice_intro_url && (
+            <div className="pt-1">
+              <p className="mb-1 text-[11px] font-medium text-ink/75">
+                Voice introduction
+              </p>
+              <audio
+                controls
+                preload="none"
+                src={partner.voice_intro_url}
+                className="h-9 w-full max-w-xs"
+              />
+            </div>
           )}
 
           {detailChips.length > 0 && (
@@ -408,6 +496,22 @@ function MatchRow({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {lastMessage && (
+            <div className="flex flex-wrap items-center gap-2 rounded border border-dusk/15 bg-dusk/5 px-3 py-1.5 text-xs">
+              {!lastMessage.isMine && (
+                <span className="shrink-0 rounded bg-teal/20 px-1.5 py-0.5 font-semibold text-dusk">
+                  Your turn to reply
+                </span>
+              )}
+              <p className="min-w-0 flex-1 truncate text-ink/85">
+                <strong className="font-medium text-dusk">
+                  {lastMessage.isMine ? "You" : partner.full_name.split(/\s+/)[0]}:
+                </strong>{" "}
+                {lastMessage.content}
+              </p>
             </div>
           )}
 

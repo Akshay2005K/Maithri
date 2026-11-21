@@ -21,6 +21,7 @@ interface MessageRow {
   sender_id: string;
   content: string;
   reply_to_prompt_key: string | null;
+  read_at?: string | null;
   created_at: string;
 }
 
@@ -181,7 +182,20 @@ export default function Chat({
     if (fetchErr) {
       setError(`${fetchErr.message} Click Refresh messages to try again.`);
     } else if (data) {
-      setMessages(data as MessageRow[]);
+      const rows = data as MessageRow[];
+      setMessages(rows);
+
+      const unreadPartnerIds = rows
+        .filter((m) => m.sender_id !== currentUser.id && !m.read_at)
+        .map((m) => m.id);
+      if (unreadPartnerIds.length > 0) {
+        const nowIso = new Date().toISOString();
+        supabase
+          .from("messages")
+          .update({ read_at: nowIso })
+          .in("id", unreadPartnerIds)
+          .then(() => {});
+      }
     }
     setDatePlan((planData as DatePlanRow) ?? null);
     setLoading(false);
@@ -189,8 +203,55 @@ export default function Chat({
 
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 4000);
-    return () => clearInterval(interval);
+
+    // Live Supabase Realtime subscription for instant new messages & read receipts
+    const channel = supabase
+      .channel(`chat-${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => {
+          const incoming = payload.new as MessageRow;
+          setMessages((prev) =>
+            prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]
+          );
+          if (incoming.sender_id !== currentUser.id && !incoming.read_at) {
+            supabase
+              .from("messages")
+              .update({ read_at: new Date().toISOString() })
+              .eq("id", incoming.id)
+              .then(() => {});
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => {
+          const updated = payload.new as MessageRow;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+          );
+        }
+      )
+      .subscribe();
+
+    // Fallback poll every 15s in case Realtime replication is not enabled
+    const interval = setInterval(fetchMessages, 15000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId]);
 
@@ -496,6 +557,20 @@ export default function Chat({
               <p className="font-serif text-sm leading-relaxed text-ink/90">
                 &ldquo;{partner.bio_prompt}&rdquo;
               </p>
+            )}
+
+            {partner.voice_intro_url && (
+              <div className="space-y-1">
+                <h3 className="text-xs font-semibold text-dusk">
+                  Voice introduction
+                </h3>
+                <audio
+                  controls
+                  preload="none"
+                  src={partner.voice_intro_url}
+                  className="h-9 w-full"
+                />
+              </div>
             )}
 
             {partnerDetailChips.length > 0 && (
@@ -847,15 +922,20 @@ export default function Chat({
             </p>
           ) : (
             <div className="my-4 max-h-96 space-y-3 overflow-y-auto pr-1">
-              {messages.map((msg) => {
+              {messages.map((msg, idx) => {
                 const isMine = msg.sender_id === currentUser.id;
+                const isLastMine =
+                  isMine &&
+                  !messages
+                    .slice(idx + 1)
+                    .some((later) => later.sender_id === currentUser.id);
                 const promptAnswer = msg.reply_to_prompt_key
                   ? findPromptAnswer(msg.reply_to_prompt_key, msg.sender_id)
                   : null;
                 return (
                   <div
                     key={msg.id}
-                    className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                    className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}
                   >
                     <div
                       className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm leading-relaxed ${
@@ -884,6 +964,11 @@ export default function Chat({
                       )}
                       <p className="font-serif">{msg.content}</p>
                     </div>
+                    {isLastMine && (
+                      <span className="mt-1 px-1 text-[11px] text-ink/70">
+                        {msg.read_at ? "Seen" : "Sent"}
+                      </span>
+                    )}
                   </div>
                 );
               })}

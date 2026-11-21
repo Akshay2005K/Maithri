@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   supabase,
   PROMPT_KEYS,
@@ -177,6 +177,201 @@ export default function ProfileSettings({
   const [detailsStatus, setDetailsStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const [hasUploadedPhoto, setHasUploadedPhoto] = useState(
+    Boolean(profile.photo_paths)
+  );
+  const [hasVoiceIntro, setHasVoiceIntro] = useState(
+    Boolean(profile.voice_intro_path)
+  );
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [mediaStatus, setMediaStatus] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  async function renderCanvasVariant(
+    img: HTMLImageElement,
+    maxDim: number,
+    blurPx: number
+  ): Promise<Blob> {
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const width = Math.max(32, Math.round(img.width * scale));
+    const height = Math.max(32, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported in this browser.");
+    if (blurPx > 0) {
+      ctx.filter = `blur(${blurPx}px)`;
+    }
+    ctx.drawImage(img, 0, 0, width, height);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("Could not encode image."));
+        },
+        "image/webp",
+        0.82
+      );
+    });
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMediaStatus(null);
+    setMediaBusy(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in again to upload.");
+
+      const imgUrl = URL.createObjectURL(file);
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Could not read image file."));
+        image.src = imgUrl;
+      });
+      URL.revokeObjectURL(imgUrl);
+
+      const [fullBlob, blur2Blob, blur1Blob] = await Promise.all([
+        renderCanvasVariant(img, 800, 0),
+        renderCanvasVariant(img, 160, 10),
+        renderCanvasVariant(img, 64, 18),
+      ]);
+
+      const fd = new FormData();
+      fd.append("kind", "photo");
+      fd.append("full", fullBlob, "full.webp");
+      fd.append("blur2", blur2Blob, "blur2.webp");
+      fd.append("blur1", blur1Blob, "blur1.webp");
+
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: fd,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Photo upload failed.");
+
+      setHasUploadedPhoto(true);
+      setMediaStatus("Photo uploaded with pre-blurred Levels 1 & 2.");
+      if (body.profile) onProfileQuietUpdate?.(body.profile as Profile);
+    } catch (err) {
+      setMediaStatus(
+        err instanceof Error ? err.message : "Could not upload photo."
+      );
+    } finally {
+      setMediaBusy(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleRemoveMedia(kind: "photo" | "voice") {
+    setMediaStatus(null);
+    setMediaBusy(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in again.");
+
+      const res = await fetch(`/api/media/upload?kind=${kind}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Remove failed.");
+
+      if (kind === "photo") {
+        setHasUploadedPhoto(false);
+        setMediaStatus("Uploaded photo removed; using illustration avatar.");
+      } else {
+        setHasVoiceIntro(false);
+        setMediaStatus("Voice introduction removed.");
+      }
+      if (body.profile) onProfileQuietUpdate?.(body.profile as Profile);
+    } catch (err) {
+      setMediaStatus(err instanceof Error ? err.message : "Action failed.");
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function uploadVoiceBlob(blob: Blob) {
+    setMediaBusy(true);
+    setMediaStatus(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in again.");
+
+      const fd = new FormData();
+      fd.append("kind", "voice");
+      fd.append("audio", blob, "voice-intro.webm");
+
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: fd,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Voice upload failed.");
+
+      setHasVoiceIntro(true);
+      setMediaStatus("Voice introduction saved.");
+      if (body.profile) onProfileQuietUpdate?.(body.profile as Profile);
+    } catch (err) {
+      setMediaStatus(
+        err instanceof Error ? err.message : "Could not save voice intro."
+      );
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function handleToggleRecording() {
+    if (recording && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+      return;
+    }
+
+    setMediaStatus(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        uploadVoiceBlob(blob);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setTimeout(() => {
+        if (recorder.state === "recording") {
+          recorder.stop();
+          setRecording(false);
+        }
+      }, 30000);
+    } catch {
+      setMediaStatus(
+        "Microphone access denied or unavailable. You can still upload an audio file."
+      );
+    }
+  }
 
   async function persistDetailsUpdate(
     nextDetails: ProfileDetails,
@@ -553,9 +748,79 @@ export default function ProfileSettings({
                 })}
               </div>
               <p className="mt-3 text-xs leading-relaxed text-ink/75">
-                Pick the avatar that fits you. Photo uploads aren&apos;t part of
-                this prototype.
+                Pick the avatar that fits you.
               </p>
+
+              <div className="mt-4 space-y-3 border-t border-dusk/15 pt-4">
+                <div>
+                  <label
+                    htmlFor="prof-photo-upload"
+                    className="block text-xs font-semibold text-dusk"
+                  >
+                    Upload real photo (optional)
+                  </label>
+                  <p className="mt-0.5 text-[11px] text-ink/75">
+                    Creates pre-blurred Level 1 &amp; Level 2 versions on upload
+                    so your sharp photo is only served at Level 3.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      id="prof-photo-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={mediaBusy}
+                      onChange={handlePhotoUpload}
+                      className="block w-full text-xs text-ink file:mr-3 file:min-h-[40px] file:rounded file:border file:border-dusk/25 file:bg-fog file:px-3 file:text-xs file:font-medium file:text-dusk"
+                    />
+                    {hasUploadedPhoto && (
+                      <button
+                        type="button"
+                        disabled={mediaBusy}
+                        onClick={() => handleRemoveMedia("photo")}
+                        className="inline-flex min-h-[40px] items-center rounded border border-marigold bg-marigold/20 px-3 text-xs font-medium text-ink"
+                      >
+                        Remove uploaded photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t border-dusk/15 pt-3">
+                  <p className="text-xs font-semibold text-dusk">
+                    Voice introduction (optional, up to 30s)
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={mediaBusy}
+                      onClick={handleToggleRecording}
+                      className={`inline-flex min-h-[44px] items-center rounded border px-3 text-xs font-medium ${
+                        recording
+                          ? "border-marigold bg-marigold/25 text-ink"
+                          : "border-dusk/25 bg-fog text-dusk hover:bg-dusk/10"
+                      }`}
+                    >
+                      {recording ? "Stop recording" : "Record voice intro"}
+                    </button>
+                    {hasVoiceIntro && (
+                      <button
+                        type="button"
+                        disabled={mediaBusy}
+                        onClick={() => handleRemoveMedia("voice")}
+                        className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-ink"
+                      >
+                        Remove voice intro
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {mediaStatus && (
+                  <p role="status" className="text-xs font-medium text-dusk">
+                    {mediaStatus}
+                  </p>
+                )}
+              </div>
             </fieldset>
           </div>
         </div>

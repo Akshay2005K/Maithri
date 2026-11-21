@@ -6,6 +6,7 @@ import {
   type SafePartnerProfile,
 } from "./supabase";
 import { getDisplayedAge } from "./profileOptions";
+import { getUnblurStatus } from "./unblur";
 
 export interface CompatibilityFactor {
   key: "q1" | "q2" | "q3" | "q4" | "q5";
@@ -337,9 +338,29 @@ export async function getOrCreateTodaysMatchesForUser(
     if (inserted) todaysRows.push(...inserted);
   }
 
-  const toMatchWithProfile = (rows: typeof todaysRows): MatchWithProfile[] =>
-    rows
-      .map((m): MatchWithProfile | null => {
+  const allDisplayedMatchIds = [...todaysRows, ...earlierRows].map((m) => m.id);
+  const messagesByMatch = new Map<
+    string,
+    { sender_id: string; content: string }[]
+  >();
+  if (allDisplayedMatchIds.length > 0) {
+    const { data: msgRows } = await adminClient
+      .from("messages")
+      .select("match_id, sender_id, content")
+      .in("match_id", allDisplayedMatchIds);
+
+    for (const row of msgRows ?? []) {
+      const list = messagesByMatch.get(row.match_id) ?? [];
+      list.push({ sender_id: row.sender_id, content: row.content });
+      messagesByMatch.set(row.match_id, list);
+    }
+  }
+
+  const toMatchWithProfile = async (
+    rows: typeof todaysRows
+  ): Promise<MatchWithProfile[]> => {
+    const items = await Promise.all(
+      rows.map(async (m): Promise<MatchWithProfile | null> => {
         const partnerId = m.user_a === me.id ? m.user_b : m.user_a;
         const partner = profileMap.get(partnerId);
         if (!partner) return null;
@@ -352,21 +373,63 @@ export async function getOrCreateTodaysMatchesForUser(
           rawAction === "like" || rawAction === "pass" || rawAction === "save"
             ? rawAction
             : null;
+
+        const safePartner = toSafePartnerProfile(partner);
+
+        // If partner uploaded a real photo, serve only the signed URL matching the current unblur level
+        if (partner.photo_paths && typeof partner.photo_paths === "object") {
+          const unblur = getUnblurStatus(messagesByMatch.get(m.id) ?? []);
+          const levelPath =
+            unblur.level === 3
+              ? partner.photo_paths.full
+              : unblur.level === 2
+                ? partner.photo_paths.blur2
+                : partner.photo_paths.blur1;
+
+          if (levelPath) {
+            const { data: signed } = await adminClient.storage
+              .from("profile-media")
+              .createSignedUrl(levelPath, 3600);
+            if (signed?.signedUrl) {
+              safePartner.avatar_url = signed.signedUrl;
+              safePartner.has_uploaded_photo = true;
+            }
+          }
+        }
+
+        if (partner.voice_intro_path) {
+          const { data: signedVoice } = await adminClient.storage
+            .from("profile-media")
+            .createSignedUrl(partner.voice_intro_path, 3600);
+          if (signedVoice?.signedUrl) {
+            safePartner.voice_intro_url = signedVoice.signedUrl;
+          }
+        }
+
         return {
           matchId: m.id,
           compatibilityScore: m.compatibility_score,
           matchDate: m.match_date,
-          partner: toSafePartnerProfile(partner),
+          partner: safePartner,
           breakdown: computeCompatibilityBreakdown(me, partner),
           myAction,
         };
       })
+    );
+
+    return items
       .filter((item): item is MatchWithProfile => item !== null)
       .sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+  };
+
+  const [todaysMatches, earlierMatches] = await Promise.all([
+    toMatchWithProfile(todaysRows),
+    toMatchWithProfile(earlierRows),
+  ]);
 
   return {
-    todaysMatches: toMatchWithProfile(todaysRows),
-    earlierMatches: toMatchWithProfile(earlierRows),
+    todaysMatches,
+    earlierMatches,
     hiddenByShieldCount,
     hasMoreCandidates: eligible.length > slotsNeeded,
   };

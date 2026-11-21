@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "npx tsc --module commonjs --moduleResolution node --target es2022 --esModuleInterop --skipLibCheck --outDir .tmp-tests tests/matching.test.ts tests/unblur.test.ts && node --test .tmp-tests/tests/*.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

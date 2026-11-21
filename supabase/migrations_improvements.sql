@@ -104,3 +104,35 @@ alter table public.matches
 alter table public.profiles
   add column if not exists is_incognito boolean not null default false,
   add column if not exists deal_breakers jsonb not null default '{}'::jsonb;
+
+-- Batch A+: Read receipts on messages
+alter table public.messages
+  add column if not exists read_at timestamptz;
+
+drop policy if exists "mark partner messages read" on public.messages;
+create policy "mark partner messages read" on public.messages
+  for update to authenticated
+  using (
+    sender_id <> auth.uid()
+    and exists (
+      select 1
+      from public.matches m
+      where m.id = match_id
+        and auth.uid() in (m.user_a, m.user_b)
+        and m.unmatched_at is null
+    )
+  )
+  with check (
+    sender_id <> auth.uid()
+  );
+
+-- ============================================================================
+-- Batch C: Supabase Storage bucket & media paths for photos + voice intros
+-- ============================================================================
+alter table public.profiles
+  add column if not exists photo_paths jsonb,
+  add column if not exists voice_intro_path text;
+
+insert into storage.buckets (id, name, public)
+values ('profile-media', 'profile-media', false)
+on conflict (id) do nothing;
