@@ -12,6 +12,7 @@ type VerifyState =
   | "pending"
   | "failed"
   | "expired"
+  | "unauthenticated"
   | "error";
 
 function UpgradeResultContent() {
@@ -42,20 +43,19 @@ function UpgradeResultContent() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (!session?.access_token) {
-        setState("error");
-        setMessage("Sign in again to verify your payment.");
-        return;
-      }
-
-      const res = await fetch("/api/payments/verify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ orderId }),
-      });
+      const res = session?.access_token
+        ? await fetch("/api/payments/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ orderId }),
+          })
+        : await fetch(
+            `/api/payments/status?order_id=${encodeURIComponent(orderId)}`,
+            { cache: "no-store" }
+          );
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -113,7 +113,9 @@ function UpgradeResultContent() {
             ? `${planName ?? "Plan"} unlocked`
             : state === "verifying" || state === "pending"
               ? "Payment verification"
-              : "Payment not completed"}
+              : state === "unauthenticated"
+                ? "Sign in to view payment status"
+                : "Payment not completed"}
         </h1>
         <p className="text-sm leading-relaxed text-ink/85">{message}</p>
         {orderId && (
