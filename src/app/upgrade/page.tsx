@@ -210,7 +210,7 @@ export default function UpgradePage() {
                           Plan details coming soon
                         </p>
                       ) : (
-                        <ul className="space-y-1.5 text-sm text-ink/85">
+                        <ul className="list-disc space-y-1.5 pl-5 text-sm text-ink/85">
                           {plan.features.map((feat) => (
                             <li key={feat}>{feat}</li>
                           ))}

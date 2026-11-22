@@ -4,12 +4,13 @@ export interface PlanEntitlements {
   dailyMatches: number;
   voiceCall: boolean;
   videoCall: boolean;
+  matchReasons: boolean;
 }
 
 export const PLAN_ENTITLEMENTS: Record<PlanTier, PlanEntitlements> = {
-  free: { dailyMatches: 3, voiceCall: false, videoCall: false },
-  plus: { dailyMatches: 4, voiceCall: true, videoCall: false },
-  pro: { dailyMatches: 4, voiceCall: true, videoCall: true },
+  free: { dailyMatches: 5, voiceCall: false, videoCall: false, matchReasons: false },
+  plus: { dailyMatches: 7, voiceCall: true, videoCall: false, matchReasons: true },
+  pro: { dailyMatches: 10, voiceCall: true, videoCall: true, matchReasons: true },
 };
 
 export function normalizePlan(plan?: string | null): PlanTier {

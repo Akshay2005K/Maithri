@@ -29,7 +29,9 @@ export interface MatchWithProfile {
   compatibilityScore: number;
   matchDate: string;
   partner: SafePartnerProfile;
-  breakdown: CompatibilityBreakdown;
+  breakdown?: CompatibilityBreakdown;
+  reasons: CompatibilityBreakdown | null;
+  reasons_locked: boolean;
   myAction?: MatchUserAction;
   hasMessages: boolean;
   unmatchedByPartner?: boolean;
@@ -427,12 +429,19 @@ export async function getOrCreateTodaysMatchesForUser(
           }
         }
 
+        const canSeeReasons = getEntitlements(me.plan).matchReasons;
+        const reasons = canSeeReasons
+          ? computeCompatibilityBreakdown(me, partner)
+          : null;
+
         return {
           matchId: m.id,
           compatibilityScore: m.compatibility_score,
           matchDate: m.match_date,
           partner: safePartner,
-          breakdown: computeCompatibilityBreakdown(me, partner),
+          ...(reasons ? { breakdown: reasons } : {}),
+          reasons,
+          reasons_locked: !canSeeReasons,
           myAction,
           hasMessages,
           unmatchedByPartner,

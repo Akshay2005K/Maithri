@@ -7,10 +7,7 @@ import {
   type Profile,
   type SafePartnerProfile,
 } from "@/lib/supabase";
-import {
-  getDisplayedAge,
-  getProfileDetailChips,
-} from "@/lib/profileOptions";
+import { getDisplayedAge } from "@/lib/profileOptions";
 import { countWords, getUnblurStatus } from "@/lib/unblur";
 import type { CompatibilityBreakdown } from "@/lib/matching";
 import {
@@ -55,7 +52,7 @@ interface ChatProps {
   matchId: string;
   partner: SafePartnerProfile;
   compatibilityScore: number;
-  breakdown?: CompatibilityBreakdown;
+  breakdown?: CompatibilityBreakdown | null;
   unmatchedByPartner?: boolean;
   closureReason?: string | null;
   onBack: () => void;
@@ -326,9 +323,22 @@ export default function Chat({
   const unblur = getUnblurStatus(messages);
   const wordCount = countWords(draft);
   const partnerPrompts = Array.isArray(partner.prompts) ? partner.prompts : [];
-  const partnerDetailChips = getProfileDetailChips(partner.details);
+  const partnerInterests = Array.isArray(partner.details?.interests)
+    ? partner.details.interests.filter(
+        (item): item is string => typeof item === "string" && item.trim() !== ""
+      )
+    : [];
+  const myInterests = new Set(
+    Array.isArray(currentUser.details?.interests)
+      ? currentUser.details.interests
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.toLowerCase())
+      : []
+  );
   const partnerFirstName = partner.full_name.split(/\s+/)[0] || partner.full_name;
-  const sharedInterests = breakdown?.sharedInterests ?? [];
+  const sharedInterests =
+    breakdown?.sharedInterests ??
+    partnerInterests.filter((item) => myInterests.has(item.toLowerCase()));
   const icebreakers = buildIcebreakers(
     sharedInterests,
     partnerFirstName,
@@ -717,72 +727,27 @@ export default function Chat({
               </div>
             </div>
 
-            {partner.bio_prompt && (
-              <p className="font-serif text-sm leading-relaxed text-ink/90">
-                &ldquo;{partner.bio_prompt}&rdquo;
-              </p>
-            )}
-
-            {partner.voice_intro_url && (
-              <div className="space-y-1">
-                <h3 className="text-xs font-semibold text-dusk">
-                  Voice introduction
-                </h3>
-                <audio
-                  controls
-                  preload="none"
-                  src={partner.voice_intro_url}
-                  className="h-9 w-full"
-                />
-              </div>
-            )}
-
-            {partnerDetailChips.length > 0 && (
+            {partnerInterests.length > 0 && (
               <div className="space-y-1.5">
-                <h3 className="text-xs font-semibold text-dusk">
-                  Details and interests
-                </h3>
+                <h3 className="text-xs font-semibold text-dusk">Interests</h3>
                 <div
-                  aria-label="Partner details and interests"
+                  aria-label="Partner interests"
                   className="flex flex-wrap gap-1.5"
                 >
-                  {partnerDetailChips.map((chip) => (
+                  {partnerInterests.map((interest) => (
                     <span
-                      key={chip.key}
+                      key={interest}
                       className="inline-block rounded-full border border-dusk/25 bg-dusk/5 px-2.5 py-0.5 text-xs font-medium text-ink"
                     >
-                      {chip.label}
+                      {interest}
                     </span>
                   ))}
                 </div>
               </div>
             )}
 
-            {partnerPrompts.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-dusk">Prompts</h3>
-                {partnerPrompts.map((prompt) => (
-                  <div
-                    key={prompt.key}
-                    className="rounded border border-dusk/15 bg-dusk/5 px-3 py-2"
-                  >
-                    <p className="text-xs font-semibold text-dusk">
-                      {prompt.key}
-                    </p>
-                    <p className="mt-0.5 font-serif text-sm leading-relaxed text-ink/90">
-                      {prompt.answer}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="border-y border-dusk/15 py-3">
-              <WavePair
-                score={compatibilityScore}
-                breakdown={breakdown}
-                showDisclaimer
-              />
+              <WavePair score={compatibilityScore} />
             </div>
 
             {/* Unblur status */}

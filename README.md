@@ -122,11 +122,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 ### F. Plans & Mock Upgrades (`src/lib/entitlements.ts`, `src/lib/plans.ts`, `/upgrade`, `Matches.tsx`)
 - **Three Tiers (`profiles.plan`):**
-  - **Free (₹0/month):** Curated daily matches (3/day) and text messaging (4+ words).
-  - **Plus (₹199/month):** 4 curated daily matches/day, text messaging, and **voice calls** (unlocked at unblur Level 2+).
-  - **Pro (₹349/month):** 4 curated daily matches/day, text messaging, **voice calls** (Level 2+), and **video calls** (unlocked at unblur Level 3).
+  - **Free (₹0/month):** Curated daily matches (5/day) and text messaging (4+ words).
+  - **Plus (₹199/month):** 7 curated daily matches/day, text messaging, **voice calls** (unlocked at unblur Level 2+), and **match reasons**.
+  - **Pro (₹349/month):** 10 curated daily matches/day, text messaging, **voice calls** (Level 2+), **video calls** (unlocked at unblur Level 3), and **match reasons**.
+- **Match Reasons Gating:** Plus and Pro: match reasons are available; Free sees them blurred; the server (`/api/matches`) omits the real reasons data for Free (`reasons: null`, `reasons_locked: true`).
 - **Caller-Pays Rule for Calls:** The caller's plan decides whether a voice or video call can start (`/api/calls/start` checks plan first, then unblur level). The receiver can accept an incoming call on **any** plan (`/api/calls/accept`).
-- **Mock Upgrade Flow:** On `/upgrade` (reachable from the top nav/menu `"Upgrade"` / `"Plans"` or the `"Upgrade"` card on `Matches` when a free user hits 3/3 matches), choosing a higher tier calls `POST /api/plan/upgrade` (`free -> plus | pro`, `plus -> pro`; no payment is taken).
+- **Mock Upgrade Flow:** On `/upgrade` (reachable from the top nav/menu `"Upgrade"` / `"Plans"` or the `"Upgrade"` card on `Matches` when a free user hits 5/5 matches), choosing a higher tier calls `POST /api/plan/upgrade` (`free -> plus | pro`, `plus -> pro`; no payment is taken).
 
 ### G. Delete My Account & Legal/Safety Pages (`api/delete-account/route.ts`, `privacy`, `terms`, `grievance`)
 - **Delete My Account:** Clicking **Delete My Account** → **Yes, Delete Permanently** sends `POST /api/delete-account` with `Authorization: Bearer <access_token>`. The server route uses `getSupabaseAdmin()` (`SUPABASE_SERVICE_ROLE_KEY`) to verify the JWT via `supabaseAdmin.auth.getUser(token)` and calls `supabaseAdmin.auth.admin.deleteUser(user.id)`. Postgres `ON DELETE CASCADE` deletes the user's `profiles`, `matches`, `messages`, and `reports_blocks` rows.

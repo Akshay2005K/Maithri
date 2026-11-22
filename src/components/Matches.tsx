@@ -355,7 +355,8 @@ export default function Matches({
             {normalizePlan(profile.plan) === "pro" ? "Pro" : "Plus"} plan
             active:
           </strong>{" "}
-          fourth daily match slot unlocked (no payment).
+          daily match cap raised to{" "}
+          {getEntitlements(profile.plan).dailyMatches} (no payment).
         </div>
       )}
 
@@ -472,16 +473,16 @@ export default function Matches({
       )}
 
       {/* Daily Free Cap Reached -> Upgrade Link */}
-      {normalizePlan(profile.plan) === "free" && todaysMatches.length === 3 && (
+      {normalizePlan(profile.plan) === "free" && todaysMatches.length >= 5 && (
         <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-marigold bg-marigold/15 p-5 sm:flex-row sm:items-center">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-dusk">
-              Daily limit reached (3/3 free matches)
+              Daily limit reached (5/5 free matches)
             </p>
             <p className="text-sm text-ink/85">
               {hasMore
-                ? "A fourth compatible match is available today."
-                : "Upgrading to Plus or Pro raises your daily cap to 4 matches."}
+                ? "More compatible matches are available today."
+                : "Upgrading to Plus raises your daily cap to 7 matches, and Pro raises it to 10."}
             </p>
           </div>
           <Link
@@ -691,7 +692,8 @@ function MatchRow({
       <div className="flex w-full flex-col gap-3 md:w-72 md:shrink-0 md:items-stretch">
         <WavePair
           score={compatibilityScore}
-          breakdown={breakdown}
+          breakdown={item.reasons ?? breakdown}
+          reasonsLocked={item.reasons_locked}
           showDisclaimer
         />
 
@@ -724,67 +726,92 @@ function MatchRow({
           </div>
         ) : (
           <>
-            <div className="flex gap-2">
+            {/* Row 1: Like (icon), Save (icon), Pass (text, only when no messages exist) */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
+                aria-label={item.myAction === "like" ? "Unlike" : "Like"}
+                title={item.myAction === "like" ? "Liked" : "Like"}
                 aria-pressed={item.myAction === "like"}
                 onClick={() =>
                   onAction(item.myAction === "like" ? "clear" : "like")
                 }
-                className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
+                className={`inline-flex min-h-[44px] min-w-[44px] flex-1 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none ${
                   item.myAction === "like"
                     ? "border-teal bg-teal/20 text-dusk"
                     : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
                 }`}
               >
-                {item.myAction === "like" ? "Liked" : "Like"}
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill={item.myAction === "like" ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
               </button>
+
               <button
                 type="button"
+                aria-label={
+                  item.myAction === "save" ? "Remove saved" : "Save"
+                }
+                title={item.myAction === "save" ? "Saved" : "Save"}
                 aria-pressed={item.myAction === "save"}
                 onClick={() =>
                   onAction(item.myAction === "save" ? "clear" : "save")
                 }
-                className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded border px-3 text-xs font-medium ${
+                className={`inline-flex min-h-[44px] min-w-[44px] flex-1 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none ${
                   item.myAction === "save"
                     ? "border-marigold bg-marigold/25 text-ink"
                     : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
                 }`}
               >
-                {item.myAction === "save" ? "Saved" : "Save"}
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill={item.myAction === "save" ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                </svg>
               </button>
-            </div>
 
-            {!item.hasMessages ? (
-              <div className="flex gap-2">
+              {!item.hasMessages && (
                 <button
                   type="button"
                   onClick={() => onAction("pass")}
-                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded border border-dusk/25 bg-fog px-3 text-sm font-medium text-ink hover:bg-marigold/15"
+                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded border border-dusk/25 bg-fog px-3 text-sm font-medium text-ink transition-colors hover:bg-marigold/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none"
                 >
                   Pass
                 </button>
-                <button
-                  type="button"
-                  onClick={onOpenChat}
-                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
-                >
-                  Open chat
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={onOpenChat}
-                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
-                >
-                  Open chat
-                </button>
-                <p className="text-[11px] leading-snug text-ink/70">
-                  To end this match, open the chat and choose Unmatch.
-                </p>
-              </div>
+              )}
+            </div>
+
+            {/* Row 2: Full-width primary Open chat */}
+            <button
+              type="button"
+              onClick={onOpenChat}
+              className="inline-flex min-h-[44px] w-full items-center justify-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog transition-colors hover:bg-dusk/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none"
+            >
+              Open chat
+            </button>
+
+            {item.hasMessages && (
+              <p className="text-[11px] leading-snug text-ink/70">
+                To end this match, open the chat and choose Unmatch.
+              </p>
             )}
           </>
         )}
