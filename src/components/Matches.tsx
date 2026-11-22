@@ -472,7 +472,7 @@ export default function Matches({
       )}
 
       {/* Daily Free Cap Reached -> Upgrade Link */}
-      {normalizePlan(profile.plan) === "free" && todaysMatches.length >= 3 && (
+      {normalizePlan(profile.plan) === "free" && todaysMatches.length === 3 && (
         <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-marigold bg-marigold/15 p-5 sm:flex-row sm:items-center">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-dusk">
