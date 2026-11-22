@@ -14,7 +14,7 @@ import {
 } from "@/lib/profileOptions";
 import type { MatchWithProfile } from "@/lib/matching";
 import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
-import { getEntitlements, normalizePlan } from "@/lib/entitlements";
+import { getEffectivePlan, getEntitlements } from "@/lib/entitlements";
 import WavePair from "@/components/WavePair";
 
 interface MatchesProps {
@@ -321,7 +321,7 @@ export default function Matches({
       <div className="border-b border-dusk/15 pb-5">
         <h1 className="text-2xl font-bold text-dusk">
           Today&apos;s curated matches ({todaysMatches.length}/
-          {getEntitlements(profile.plan).dailyMatches})
+          {getEntitlements(profile.plan, profile.plan_expires_at).dailyMatches})
         </h1>
         <p className="mt-1 text-sm text-ink/80">
           Generated on open from your compatibility quiz and city (
@@ -349,14 +349,16 @@ export default function Matches({
         </p>
       </div>
 
-      {normalizePlan(profile.plan) !== "free" && (
+      {getEffectivePlan(profile.plan, profile.plan_expires_at) !== "free" && (
         <div className="rounded-lg border border-marigold bg-marigold/20 px-4 py-2.5 text-sm text-ink">
           <strong>
-            {normalizePlan(profile.plan) === "pro" ? "Pro" : "Plus"} plan
-            active:
+            {getEffectivePlan(profile.plan, profile.plan_expires_at) === "pro"
+              ? "Pro"
+              : "Plus"}{" "}
+            plan active:
           </strong>{" "}
           daily match cap raised to{" "}
-          {getEntitlements(profile.plan).dailyMatches} (no payment).
+          {getEntitlements(profile.plan, profile.plan_expires_at).dailyMatches}.
         </div>
       )}
 
@@ -473,7 +475,8 @@ export default function Matches({
       )}
 
       {/* Daily Free Cap Reached -> Upgrade Link */}
-      {normalizePlan(profile.plan) === "free" && todaysMatches.length >= 5 && (
+      {getEffectivePlan(profile.plan, profile.plan_expires_at) === "free" &&
+        todaysMatches.length >= 5 && (
         <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-marigold bg-marigold/15 p-5 sm:flex-row sm:items-center">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-dusk">

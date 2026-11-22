@@ -189,7 +189,13 @@ export default function Chat({
 
   function handleCallButtonClick(callType: "audio" | "video") {
     setCallInlineNotice(null);
-    if (!canStartCall(currentUser.plan, callType)) {
+    if (
+      !canStartCall(
+        currentUser.plan,
+        callType,
+        currentUser.plan_expires_at
+      )
+    ) {
       setUpgradeDialogPlan(getRequiredPlanForCall(callType));
       return;
     }
@@ -1247,8 +1253,16 @@ export default function Chat({
                   className="min-h-[44px] min-w-0 flex-1 rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2"
                 />
                 {(() => {
-                  const voiceAllowed = canStartCall(currentUser.plan, "audio");
-                  const videoAllowed = canStartCall(currentUser.plan, "video");
+                  const voiceAllowed = canStartCall(
+                    currentUser.plan,
+                    "audio",
+                    currentUser.plan_expires_at
+                  );
+                  const videoAllowed = canStartCall(
+                    currentUser.plan,
+                    "video",
+                    currentUser.plan_expires_at
+                  );
                   return (
                     <div className="flex shrink-0 items-center gap-1.5">
                       <button

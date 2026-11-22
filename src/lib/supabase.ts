@@ -97,5 +97,6 @@ export interface Profile extends SafePartnerProfile {
   dpdp_consent_at: string;
   house_rules_accepted_at?: string | null;
   plan: PlanTier;
+  plan_expires_at?: string | null;
   created_at?: string;
 }

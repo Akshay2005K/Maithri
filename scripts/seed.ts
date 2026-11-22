@@ -966,6 +966,7 @@ async function runSeed() {
       dpdp_consent_at: now,
       house_rules_accepted_at: now,
       plan: user.plan ?? "free",
+      plan_expires_at: null,
     });
 
     if (profileErr) throw profileErr;

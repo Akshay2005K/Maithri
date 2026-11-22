@@ -110,11 +110,17 @@ export async function POST(request: Request) {
     // Plan check comes first (computed from DB, never from request body)
     const { data: profileRow } = await supabaseAdmin
       .from("profiles")
-      .select("full_name, plan")
+      .select("full_name, plan, plan_expires_at")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!canStartCall(profileRow?.plan, callType)) {
+    if (
+      !canStartCall(
+        profileRow?.plan,
+        callType,
+        profileRow?.plan_expires_at
+      )
+    ) {
       const requiredPlan = getRequiredPlanForCall(callType);
       return NextResponse.json(
         {

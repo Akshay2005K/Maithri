@@ -18,8 +18,26 @@ export function normalizePlan(plan?: string | null): PlanTier {
   return "free";
 }
 
-export function getEntitlements(plan?: string | null): PlanEntitlements {
-  return PLAN_ENTITLEMENTS[normalizePlan(plan)];
+export function getEffectivePlan(
+  plan?: string | null,
+  planExpiresAt?: string | null
+): PlanTier {
+  const normalized = normalizePlan(plan);
+  if (normalized === "free") return "free";
+  if (!planExpiresAt) return normalized;
+
+  const expiresMs = Date.parse(planExpiresAt);
+  if (Number.isNaN(expiresMs) || expiresMs <= Date.now()) {
+    return "free";
+  }
+  return normalized;
+}
+
+export function getEntitlements(
+  plan?: string | null,
+  planExpiresAt?: string | null
+): PlanEntitlements {
+  return PLAN_ENTITLEMENTS[getEffectivePlan(plan, planExpiresAt)];
 }
 
 export function getRequiredPlanForCall(
@@ -30,8 +48,9 @@ export function getRequiredPlanForCall(
 
 export function canStartCall(
   plan: string | null | undefined,
-  callType: "audio" | "video"
+  callType: "audio" | "video",
+  planExpiresAt?: string | null
 ): boolean {
-  const ent = getEntitlements(plan);
+  const ent = getEntitlements(plan, planExpiresAt);
   return callType === "video" ? ent.videoCall : ent.voiceCall;
 }

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { normalizePlan, type PlanTier } from "@/lib/entitlements";
+import { getEffectivePlan, type PlanTier } from "@/lib/entitlements";
 import { PLANS } from "@/lib/plans";
+import { CASHFREE_TEST_DATA } from "@/lib/cashfreeTestData";
 
 const PLAN_RANK: Record<PlanTier, number> = {
   free: 0,
@@ -12,12 +14,67 @@ const PLAN_RANK: Record<PlanTier, number> = {
   pro: 2,
 };
 
+declare global {
+  interface Window {
+    Cashfree?: (opts: { mode: "sandbox" | "production" }) => {
+      checkout: (opts: {
+        paymentSessionId: string;
+        redirectTarget?: "_self" | "_modal" | "_blank";
+      }) => Promise<{
+        error?: { message?: string };
+        redirect?: boolean;
+        paymentDetails?: { paymentMessage?: string };
+      }>;
+    };
+  }
+}
+
+function loadCashfreeSdk(): Promise<void> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Checkout requires a browser."));
+  }
+  if (window.Cashfree) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://sdk.cashfree.com/js/v3/cashfree.js"]'
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () =>
+        reject(new Error("Could not load Cashfree checkout SDK."))
+      );
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () =>
+      reject(new Error("Could not load Cashfree checkout SDK."));
+    document.head.appendChild(script);
+  });
+}
+
+function formatExpiryDate(iso?: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms) || ms <= Date.now()) return null;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(ms));
+}
+
 export default function UpgradePage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<PlanTier>("free");
+  const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null);
   const [upgradingTo, setUpgradingTo] = useState<PlanTier | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function loadPlan() {
@@ -36,14 +93,15 @@ export default function UpgradePage() {
     setSignedIn(true);
     const { data, error } = await supabase
       .from("profiles")
-      .select("plan")
+      .select("plan, plan_expires_at")
       .eq("id", session.user.id)
       .maybeSingle();
 
     if (error) {
       setErrorMsg(error.message);
     } else if (data) {
-      setCurrentPlan(normalizePlan(data.plan));
+      setCurrentPlan(getEffectivePlan(data.plan, data.plan_expires_at));
+      setPlanExpiresAt(data.plan_expires_at ?? null);
     }
     setLoading(false);
   }
@@ -54,7 +112,12 @@ export default function UpgradePage() {
 
   async function handleChoosePlan(targetPlan: "plus" | "pro") {
     setErrorMsg(null);
-    setSuccessMsg(null);
+
+    if (process.env.NEXT_PUBLIC_CASHFREE_MODE !== "sandbox") {
+      setErrorMsg("Payments are available in sandbox test mode only.");
+      return;
+    }
+
     setUpgradingTo(targetPlan);
 
     try {
@@ -63,10 +126,10 @@ export default function UpgradePage() {
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        throw new Error("Sign in again to change your plan.");
+        throw new Error("Sign in again to continue to checkout.");
       }
 
-      const res = await fetch("/api/plan/upgrade", {
+      const res = await fetch("/api/payments/create-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,24 +139,41 @@ export default function UpgradePage() {
       });
 
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(body.error || "Could not update your plan.");
+      if (!res.ok || !body.paymentSessionId || !body.orderId) {
+        throw new Error(body.error || "Could not start sandbox checkout.");
       }
 
-      const nextPlan = normalizePlan(body.plan);
-      setCurrentPlan(nextPlan);
-      setSuccessMsg(
-        `You are now on the ${nextPlan === "pro" ? "Pro" : "Plus"} plan.`
-      );
-      await loadPlan();
+      await loadCashfreeSdk();
+      if (!window.Cashfree) {
+        throw new Error("Cashfree checkout SDK failed to initialize.");
+      }
+
+      const cashfree = window.Cashfree({ mode: "sandbox" });
+      const result = await cashfree.checkout({
+        paymentSessionId: body.paymentSessionId,
+        redirectTarget: "_modal",
+      });
+
+      if (result.error) {
+        throw new Error(
+          result.error.message || "Checkout closed or failed. Try again."
+        );
+      }
+
+      if (result.paymentDetails || !result.redirect) {
+        router.push(
+          `/upgrade/result?order_id=${encodeURIComponent(body.orderId)}`
+        );
+      }
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : "Could not update your plan."
+        err instanceof Error ? err.message : "Could not start checkout."
       );
-    } finally {
       setUpgradingTo(null);
     }
   }
+
+  const formattedExpiry = formatExpiryDate(planExpiresAt);
 
   return (
     <>
@@ -127,26 +207,24 @@ export default function UpgradePage() {
               Choose the plan that fits how you connect on pHavelength.
             </p>
             <p className="mt-2 inline-block rounded border border-marigold bg-marigold/15 px-3 py-1 text-xs font-medium text-ink">
-              Prototype: no payment is taken.
+              Test mode: no real money is charged.
             </p>
           </div>
 
-          {successMsg && (
-            <p
-              role="status"
-              className="rounded-lg border border-teal bg-teal/15 p-3.5 text-sm font-medium text-dusk"
-            >
-              {successMsg}
-            </p>
-          )}
-
           {errorMsg && (
-            <p
+            <div
               role="alert"
-              className="rounded-lg border border-marigold bg-marigold/20 p-3.5 text-sm font-medium text-ink"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-marigold bg-marigold/20 p-3.5 text-sm font-medium text-ink"
             >
-              {errorMsg}
-            </p>
+              <span>{errorMsg}</span>
+              <button
+                type="button"
+                onClick={() => setErrorMsg(null)}
+                className="inline-flex min-h-[36px] items-center rounded border border-dusk/25 bg-fog px-3 text-xs font-medium text-dusk hover:bg-dusk/10"
+              >
+                Dismiss
+              </button>
+            </div>
           )}
 
           {!loading && !signedIn && (
@@ -190,9 +268,16 @@ export default function UpgradePage() {
                   >
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <h2 className="text-lg font-bold text-dusk">
-                          {plan.name}
-                        </h2>
+                        <div className="flex items-center justify-between gap-2">
+                          <h2 className="text-lg font-bold text-dusk">
+                            {plan.name}
+                          </h2>
+                          {isCurrent && formattedExpiry && (
+                            <span className="rounded-full border border-teal/50 bg-teal/15 px-2.5 py-0.5 text-[11px] font-semibold text-dusk">
+                              {plan.name} until {formattedExpiry}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-ink/80">
                           {plan.description}
                         </p>
@@ -238,7 +323,7 @@ export default function UpgradePage() {
                           className="inline-flex min-h-[44px] w-full items-center justify-center rounded bg-dusk px-4 text-sm font-medium text-fog transition-colors hover:bg-dusk/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none"
                         >
                           {isUpdatingThis
-                            ? `Updating to ${plan.name}...`
+                            ? "Opening sandbox checkout..."
                             : `Choose ${plan.name}`}
                         </button>
                       ) : null}
@@ -248,6 +333,33 @@ export default function UpgradePage() {
               })}
             </div>
           )}
+
+          {/* How to test box (Sandbox test credentials) */}
+          <aside className="space-y-2 rounded-lg border border-dusk/20 bg-dusk/5 p-5 text-xs leading-relaxed text-ink/85">
+            <h2 className="text-sm font-semibold text-dusk">
+              How to test (Cashfree Sandbox)
+            </h2>
+            <p>
+              <strong>Test mode: no real money is charged.</strong> Use these
+              details from {CASHFREE_TEST_DATA.sourceLabel} inside the Cashfree
+              checkout popup:
+            </p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <strong>Test Visa card:</strong>{" "}
+                <code>{CASHFREE_TEST_DATA.card.visaNumber}</code> | Expiry:{" "}
+                <code>{CASHFREE_TEST_DATA.card.expiry}</code> | CVV:{" "}
+                <code>{CASHFREE_TEST_DATA.card.cvv}</code> | Name:{" "}
+                <code>{CASHFREE_TEST_DATA.card.name}</code> | OTP:{" "}
+                <code>{CASHFREE_TEST_DATA.card.otp}</code>
+              </li>
+              <li>
+                <strong>Test UPI VPA (success):</strong>{" "}
+                <code>{CASHFREE_TEST_DATA.upi.successVpa}</code> (or{" "}
+                <code>{CASHFREE_TEST_DATA.upi.failedVpa}</code> to test failure)
+              </li>
+            </ul>
+          </aside>
         </div>
       </main>
     </>

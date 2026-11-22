@@ -243,7 +243,7 @@ export async function getOrCreateTodaysMatchesForUser(
   const todaysRows = activeExisting.filter((m) => m.match_date === today);
   const earlierRows = activeExisting.filter((m) => m.match_date !== today);
 
-  const dailyCap = getEntitlements(me.plan).dailyMatches;
+  const dailyCap = getEntitlements(me.plan, me.plan_expires_at).dailyMatches;
   const slotsNeeded = Math.max(0, dailyCap - todaysCreatedCount);
 
   // Filter eligible candidates & count Privacy Shield removals
@@ -429,7 +429,10 @@ export async function getOrCreateTodaysMatchesForUser(
           }
         }
 
-        const canSeeReasons = getEntitlements(me.plan).matchReasons;
+        const canSeeReasons = getEntitlements(
+          me.plan,
+          me.plan_expires_at
+        ).matchReasons;
         const reasons = canSeeReasons
           ? computeCompatibilityBreakdown(me, partner)
           : null;

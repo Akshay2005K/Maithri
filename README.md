@@ -14,7 +14,7 @@ An intentional dating web application built for the **eLitmus Software Developer
 
 ### Simulated vs. Real (Honest Disclosures)
 - **Simulated eLitmus verification:** This prototype does **not** connect to eLitmus's private candidate database. Batch/verification badges are simulated and explicitly labeled `"Simulated eLitmus verification (prototype)"` in the UI, designed to plug into eLitmus data later. Company domains are self-declared.
-- **Mock plans & upgrades:** The `/upgrade` page offers **Free** (₹0/month), **Plus** (₹199/month), and **Pro** (₹349/month) tiers labeled `"Prototype: no payment is taken."` Upgrading calls `POST /api/plan/upgrade` to update `profiles.plan` on the server with zero real money charged.
+- **Sandbox-only payments:** The `/upgrade` page offers **Free** (₹0/month), **Plus** (₹199/month), and **Pro** (₹349/month) tiers powered by **Cashfree Sandbox** (`"Test mode: no real money is charged."`). Payment routes refuse to run unless `CASHFREE_ENV=sandbox` and `CASHFREE_APP_ID` starts with `TEST_`.
 - **Illustration avatars only:** All profiles use local geometric/illustrated SVG avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`), with no photos of real people.
 
 ---
@@ -127,7 +127,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
   - **Pro (₹349/month):** 10 curated daily matches/day, text messaging, **voice calls** (Level 2+), **video calls** (unlocked at unblur Level 3), and **match reasons**.
 - **Match Reasons Gating:** Plus and Pro: match reasons are available; Free sees them blurred; the server (`/api/matches`) omits the real reasons data for Free (`reasons: null`, `reasons_locked: true`).
 - **Caller-Pays Rule for Calls:** The caller's plan decides whether a voice or video call can start (`/api/calls/start` checks plan first, then unblur level). The receiver can accept an incoming call on **any** plan (`/api/calls/accept`).
-- **Mock Upgrade Flow:** On `/upgrade` (reachable from the top nav/menu `"Upgrade"` / `"Plans"` or the `"Upgrade"` card on `Matches` when a free user hits 5/5 matches), choosing a higher tier calls `POST /api/plan/upgrade` (`free -> plus | pro`, `plus -> pro`; no payment is taken).
+- **Cashfree Sandbox Payment Flow (`/upgrade`, `/upgrade/result`, `/api/payments/*`):**
+  - Clicking **Choose Plus** or **Choose Pro** calls `POST /api/payments/create-order` (server computes INR amount from `src/lib/plans.ts`, enforces the `CASHFREE_ENV=sandbox` + `TEST_` App ID guard, rate-limits to 10 orders/hour, and inserts a `'created'` row in `payments`).
+  - Cashfree's JS SDK v3 (`mode: "sandbox"`) opens modal checkout and redirects to `/upgrade/result?order_id=...`, which calls `POST /api/payments/verify` (server fetches status from Cashfree, checks `PAID` + amount + `INR`, atomically marks `payments` `'paid'`, and grants **30-day access** via `profiles.plan_expires_at` with no recurring billing; renewing the same plan extends from the current expiry if later than now).
+  - `POST /api/payments/webhook` verifies Cashfree's raw-body `x-webhook-signature` + `x-webhook-timestamp` HMAC-SHA256 and runs the same idempotent verification helper.
+  - **Demo accounts:** Seeded Plus (`rohan@elitmus-demo.in`) and Pro (`vikram@elitmus-demo.in`) accounts have `plan_expires_at = null` so evaluators never lose access.
+  - **Sandbox test data:** Visa `4706131211212123` (Expiry `03/2028`, CVV `123`, Name `Test`, OTP `111000`); UPI `testsuccess@gocash` (success) or `invalid@upi` (failure).
 
 ### G. Delete My Account & Legal/Safety Pages (`api/delete-account/route.ts`, `privacy`, `terms`, `grievance`)
 - **Delete My Account:** Clicking **Delete My Account** → **Yes, Delete Permanently** sends `POST /api/delete-account` with `Authorization: Bearer <access_token>`. The server route uses `getSupabaseAdmin()` (`SUPABASE_SERVICE_ROLE_KEY`) to verify the JWT via `supabaseAdmin.auth.getUser(token)` and calls `supabaseAdmin.auth.admin.deleteUser(user.id)`. Postgres `ON DELETE CASCADE` deletes the user's `profiles`, `matches`, `messages`, and `reports_blocks` rows.
@@ -158,7 +163,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 3. **Illustration avatars instead of photos (and CSS-only blur):** All profiles use local SVG illustration avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`) instead of real user photo uploads. Photo blur (`blur-xl` / `blur-md` / `blur-none`) is applied visually in CSS while the SVG URL remains in the DOM; a production system with real photos would store pre-blurred assets and serve signed URLs on the server.
 4. **Self-declared workplace, college, and batch:** Company domains, college names, role titles, and eLitmus batches are self-declared; no live eLitmus candidate database API or corporate email verification is integrated.
 5. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are unguessable 128-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
-6. **Mock plan upgrades & no downgrade path:** Plan upgrades on `/upgrade` are a mock prototype with no real payment processor and no downgrade path (`free -> plus | pro`, `plus -> pro`). Plan data lives in `profiles.plan` and is protected by a `BEFORE INSERT OR UPDATE` trigger (`trg_enforce_profile_plan_guard`) so only `service_role` or `postgres` can modify it. The DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
+6. **Sandbox payments & production gaps:** Payments run in Cashfree Sandbox mode only (no real money is charged, no recurring billing, and no refunds or cancellations flow). Plan data lives in `profiles.plan` and `profiles.plan_expires_at` and is protected by `trg_enforce_profile_plan_guard`. A production launch would require Cashfree production activation, collecting a real customer phone number if Cashfree enforces it, GST handling, a refund policy, and formal legal review of the DPDP-inspired privacy/terms/grievance/safety pages.
 7. **Unified Pass & Unmatch limits:** Closure messages on Unmatch are a fixed set of four polite options (no free text), and a silent **Pass** on a zero-message match can still be noticed by the other person if they already viewed their list before refreshing.
 8. **Voice & Video Calling (LiveKit Cloud):**
    - Free-plan limits apply; see [LiveKit Pricing](https://livekit.io/pricing) for current quotas and limits.
@@ -176,7 +181,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, and `supabase/migrations_plans.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, and `supabase/migrations_payments.sql` in **SQL Editor**.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:
@@ -187,8 +192,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
    LIVEKIT_API_KEY=your-livekit-api-key-server-only
    LIVEKIT_API_SECRET=your-livekit-api-secret-server-only
+   CASHFREE_APP_ID=TEST_your-sandbox-app-id
+   CASHFREE_SECRET_KEY=your-sandbox-secret-key-server-only
+   CASHFREE_ENV=sandbox
+   NEXT_PUBLIC_CASHFREE_MODE=sandbox
    ```
-   *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY`, or `LIVEKIT_API_SECRET` in client code.)*
+   *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, or `CASHFREE_SECRET_KEY` in client code.)*
 
 4. **Seed the 16 demo users (requires Node 22+):**
    ```bash
@@ -209,8 +218,8 @@ Shared password for all seeded accounts: `elitmus2026`
 
 - **Demo 1 (Free plan — Man, looking for women, Bengaluru, `flipkart.com`):** `aarav@elitmus-demo.in` *(Level-2 match with Anya; Level-3 match with Priya)*
 - **Demo 2 (Free plan — Woman, looking for men, Bengaluru, `razorpay.com`):** `anya@elitmus-demo.in` *(shares a pre-seeded Level-2 match and 2 starter messages with Aarav)*
-- **Demo 3 (Plus plan — Man, looking for women, Bengaluru, `swiggy.in`):** `rohan@elitmus-demo.in` *(Level-3 match with `kriti@elitmus-demo.in` for voice-call testing)*
-- **Demo 4 (Pro plan — Man, looking for everyone, Bengaluru, `postman.com`):** `vikram@elitmus-demo.in` *(Level-3 match with `sneha@elitmus-demo.in` for voice & video-call testing)*
+- **Demo 3 (Plus plan — Man, looking for women, Bengaluru, `swiggy.in`):** `rohan@elitmus-demo.in` *(Level-3 match with `kriti@elitmus-demo.in` for voice-call testing; seeded with `plan_expires_at = null` so it never expires)*
+- **Demo 4 (Pro plan — Man, looking for everyone, Bengaluru, `postman.com`):** `vikram@elitmus-demo.in` *(Level-3 match with `sneha@elitmus-demo.in` for voice & video-call testing; seeded with `plan_expires_at = null` so it never expires)*
 - **Beyond binary / Everyone filter test (Beyond binary, looking for everyone, Bengaluru):** `arjun@elitmus-demo.in`
 - **Privacy Shield Test (Woman, Bengaluru, `flipkart.com`):** `divya@elitmus-demo.in` *(hidden from Aarav when Privacy Shield is ON)*
 - **Additional seeded candidates:** `kriti@elitmus-demo.in`, `meera@elitmus-demo.in`, `priya@elitmus-demo.in`, `sneha@elitmus-demo.in`, `neha@elitmus-demo.in`, `tara@elitmus-demo.in`, `riya@elitmus-demo.in`, `dev@elitmus-demo.in`, `kabir@elitmus-demo.in`, `siddharth@elitmus-demo.in`

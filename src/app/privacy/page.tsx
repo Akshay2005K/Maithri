@@ -133,6 +133,21 @@ export default function PrivacyPage() {
 
           <section className="space-y-2">
             <h2 className="text-lg font-semibold text-dusk">
+              Plan payments (Cashfree Sandbox)
+            </h2>
+            <p className="font-serif text-sm leading-relaxed text-ink/90">
+              Plan upgrades are processed by <strong>Cashfree</strong>{" "}
+              (currently in test/sandbox mode; no real money is charged). We
+              store your order ID (<code>cashfree_order_id</code>), purchased
+              plan, amount, and payment status in <code>payments</code>. We
+              never store card or UPI details. Cashfree receives your verified
+              email address and an internal user ID (plus a fixed dummy phone
+              number in sandbox mode).
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-dusk">
               Right to erasure (delete my account)
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">

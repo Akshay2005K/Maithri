@@ -10,7 +10,7 @@ import {
   type RelationshipGoal,
 } from "@/lib/supabase";
 import type { MatchWithProfile } from "@/lib/matching";
-import { normalizePlan } from "@/lib/entitlements";
+import { getEffectivePlan } from "@/lib/entitlements";
 import AuthForm from "@/components/AuthForm";
 import Onboarding from "@/components/Onboarding";
 import Quiz from "@/components/Quiz";
@@ -212,7 +212,8 @@ export default function HomePage() {
                     href="/upgrade"
                     className="hidden min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none sm:inline-flex"
                   >
-                    {normalizePlan(profile?.plan) === "pro"
+                    {getEffectivePlan(profile?.plan, profile?.plan_expires_at) ===
+                    "pro"
                       ? "Plans"
                       : "Upgrade"}
                   </Link>
@@ -290,7 +291,10 @@ export default function HomePage() {
                 onClick={() => setMenuOpen(false)}
                 className="flex min-h-[44px] w-full items-center rounded px-3 text-left text-sm font-medium text-ink hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2"
               >
-                {normalizePlan(profile?.plan) === "pro" ? "Plans" : "Upgrade"}
+                {getEffectivePlan(profile?.plan, profile?.plan_expires_at) ===
+                "pro"
+                  ? "Plans"
+                  : "Upgrade"}
               </Link>
               <Link
                 href="/settings"
