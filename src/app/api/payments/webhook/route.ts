@@ -7,6 +7,10 @@ import {
   verifyCashfreeWebhookSignature,
 } from "@/lib/cashfreeServer";
 
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(request: Request) {
   try {
     getCashfreeSandboxConfig();
