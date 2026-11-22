@@ -803,7 +803,7 @@ export default function Onboarding({
               className="mt-0.5 h-5 w-5 shrink-0 accent-teal"
             />
             <span className="leading-relaxed">
-              <strong>DPDP consent:</strong> I consent to pHavelength storing
+              <strong>DPDP consent:</strong> I consent to Maithri storing
               and processing my profile details, birth date, optional profile
               details (such as interests, languages, and lifestyle preferences),
               self-declared company or college, and quiz answers solely for

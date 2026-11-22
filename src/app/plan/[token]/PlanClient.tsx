@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 
 interface PublicPlanData {
   creatorFirstName: string;
@@ -55,18 +56,13 @@ export default function PlanClient({ token }: { token: string }) {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"
             className="inline-flex min-h-[44px] items-center rounded border border-dusk/25 px-3.5 text-sm font-medium text-dusk hover:bg-dusk/10"
           >
-            Visit pHavelength
+            Visit Maithri
           </Link>
         </div>
       </header>

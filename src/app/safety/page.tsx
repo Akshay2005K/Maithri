@@ -1,8 +1,9 @@
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 
 const SAFETY_TIPS = [
   {
-    title: "Keep early conversations on pHavelength",
+    title: "Keep early conversations on Maithri",
     body: "Get to know your match through prompt replies and progressive unblur chat before moving to personal phone numbers or messaging apps.",
   },
   {
@@ -44,12 +45,7 @@ export default function SafetyPage() {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"
@@ -66,7 +62,7 @@ export default function SafetyPage() {
             <h1 className="text-2xl font-bold text-dusk">Safety tips</h1>
             <p className="mt-1 text-sm text-ink/80">
               Practical guidelines for chatting and meeting safely on
-              pHavelength.
+              Maithri.
             </p>
           </div>
 

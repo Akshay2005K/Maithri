@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 
 export default function PrivacyPage() {
   return (
@@ -9,12 +10,7 @@ export default function PrivacyPage() {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"
@@ -32,7 +28,7 @@ export default function PrivacyPage() {
           </div>
 
           <p className="rounded border border-marigold bg-marigold/20 p-3.5 text-xs leading-relaxed text-ink">
-            Prototype notice: pHavelength is an assignment prototype and does
+            Prototype notice: Maithri is a prototype and does
             not constitute formal legal advice. A real launch requires
             professional legal review.
           </p>
@@ -123,7 +119,7 @@ export default function PrivacyPage() {
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">
               1-on-1 voice and video calls run through a third-party real-time
-              provider (<strong>LiveKit Cloud, EU region</strong>). pHavelength
+              provider (<strong>LiveKit Cloud, EU region</strong>). Maithri
               does not record or store call audio or video content. Call
               metadata—who participated, when the call occurred, how long it
               lasted, and the call mode (voice or video)—is stored in{" "}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { supabase } from "@/lib/supabase";
@@ -164,12 +165,7 @@ export default function UpgradeResultPage() {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"

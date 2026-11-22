@@ -274,7 +274,7 @@ export function validateBirthDateParts(
   if (age === null || age < 18) {
     return {
       valid: false,
-      error: "You must be 18 or older to use pHavelength.",
+      error: "You must be 18 or older to use Maithri.",
     };
   }
 

@@ -171,7 +171,7 @@ export default function AuthForm() {
       {/* Left column: Hero headline, one-sentence explanation, static WavePair */}
       <div className="space-y-6 md:col-span-7">
         <p className="inline-block rounded border border-marigold bg-marigold/20 px-3 py-1 text-xs font-medium text-ink">
-          Simulated eLitmus verification (prototype)
+          Where Connections Become Meaningful.
         </p>
 
         <h1 className="text-3xl font-bold leading-tight tracking-tight text-dusk sm:text-4xl">
@@ -289,7 +289,7 @@ export default function AuthForm() {
                 {isSignUp ? "Create an account" : "Sign in"}
               </h2>
               <p className="mt-1 text-xs text-ink/75">
-                Simulated eLitmus verification (prototype)
+                Where Connections Become Meaningful.
               </p>
 
               <form onSubmit={handleSubmit} className="mt-5 space-y-4">

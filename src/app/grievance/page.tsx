@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 
 export default function GrievancePage() {
   return (
@@ -9,12 +10,7 @@ export default function GrievancePage() {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"

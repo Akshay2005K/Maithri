@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PlanClient from "./PlanClient";
 
 export const metadata: Metadata = {
-  title: "Shared Meetup Plan | pHavelength",
+  title: "Shared Meetup Plan | Maithri",
   robots: {
     index: false,
     follow: false,

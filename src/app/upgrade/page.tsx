@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getEffectivePlan, type PlanTier } from "@/lib/entitlements";
@@ -183,12 +184,7 @@ export default function UpgradePage() {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"
@@ -204,7 +200,7 @@ export default function UpgradePage() {
           <div className="border-b border-dusk/15 pb-4">
             <h1 className="text-2xl font-bold text-dusk">Plans</h1>
             <p className="mt-1 text-sm text-ink/80">
-              Choose the plan that fits how you connect on pHavelength.
+              Choose the plan that fits how you connect on Maithri.
             </p>
             <p className="mt-2 inline-block rounded border border-marigold bg-marigold/15 px-3 py-1 text-xs font-medium text-ink">
               Test mode: no real money is charged.

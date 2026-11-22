@@ -85,7 +85,7 @@ export default function HouseRulesModal({
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border-2 border-dusk/30 bg-fog p-6 text-left"
       >
         <h2 id="house-rules-title" className="text-2xl font-bold text-dusk">
-          Welcome to pHavelength.
+          Welcome to Maithri.
         </h2>
         <p id="house-rules-subtitle" className="mt-1 text-sm text-ink/80">
           Please follow these house rules.

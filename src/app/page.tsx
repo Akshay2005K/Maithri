@@ -12,6 +12,7 @@ import {
 import type { MatchWithProfile } from "@/lib/matching";
 import { getEffectivePlan } from "@/lib/entitlements";
 import AuthForm from "@/components/AuthForm";
+import BrandMark from "@/components/BrandMark";
 import Onboarding from "@/components/Onboarding";
 import Quiz from "@/components/Quiz";
 import Matches from "@/components/Matches";
@@ -197,12 +198,7 @@ export default function HomePage() {
               }}
               className="flex min-h-[44px] flex-col items-start justify-center text-left"
             >
-              <span className="text-xl font-bold tracking-tight text-dusk">
-                pHavelength
-              </span>
-              <span className="text-xs text-ink/75">
-                Simulated eLitmus verification (prototype)
-              </span>
+              <BrandMark />
             </button>
 
             {user ? (

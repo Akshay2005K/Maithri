@@ -16,8 +16,8 @@ const literata = Literata({
 });
 
 export const metadata: Metadata = {
-  title: "pHavelength (Prototype)",
-  description: "Intentional dating website prototype for early-career professionals",
+  title: "Maithri",
+  description: "Where Connections Become Meaningful.",
 };
 
 const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem("phavelength-theme")||"system";var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");document.documentElement.setAttribute("data-theme-pref",s);}catch(e){}})();`;
@@ -43,7 +43,7 @@ export default function RootLayout({
           <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-3 px-4 py-6 text-left text-sm text-ink/80 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div>
               <p className="font-medium text-ink">
-                pHavelength — Simulated eLitmus verification (prototype)
+                Maithri — Where Connections Become Meaningful.
               </p>
               <p className="mt-1 text-xs text-ink/75">
                 Grievance contact:{" "}

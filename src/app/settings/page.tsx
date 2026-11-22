@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BrandMark from "@/components/BrandMark";
 import { supabase } from "@/lib/supabase";
 
 type ThemePreference = "system" | "light" | "dark";
@@ -97,12 +98,7 @@ export default function SettingsPage() {
             href="/"
             className="flex min-h-[44px] flex-col items-start justify-center"
           >
-            <span className="text-xl font-bold tracking-tight text-dusk">
-              pHavelength
-            </span>
-            <span className="text-xs text-ink/75">
-              Simulated eLitmus verification (prototype)
-            </span>
+            <BrandMark />
           </Link>
           <Link
             href="/"
@@ -127,7 +123,7 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-lg font-semibold text-dusk">Appearance</h2>
               <p className="mt-0.5 text-xs text-ink/75">
-                Choose how pHavelength looks on this browser.
+                Choose how Maithri looks on this browser.
               </p>
             </div>
 
