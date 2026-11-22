@@ -117,6 +117,20 @@ export default function PrivacyPage() {
 
           <section className="space-y-2">
             <h2 className="text-lg font-semibold text-dusk">
+              Voice and video calling (LiveKit Cloud)
+            </h2>
+            <p className="font-serif text-sm leading-relaxed text-ink/90">
+              1-on-1 voice and video calls run through a third-party real-time
+              provider (<strong>LiveKit Cloud, EU region</strong>). pHavelength
+              does not record or store call audio or video content. Call
+              metadata—who participated, when the call occurred, how long it
+              lasted, and the call mode (voice or video)—is stored in{" "}
+              <code>calls</code>.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-dusk">
               Right to erasure (delete my account)
             </h2>
             <p className="font-serif text-sm leading-relaxed text-ink/90">

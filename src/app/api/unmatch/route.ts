@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { VALID_CLOSURE_REASON_KEYS } from "@/lib/closureReasons";
+import { endActiveMatchCalls } from "@/lib/callsServer";
 
 // Server-only route delegating to unmatch_match RPC so /api/unmatch and
 // /api/match-action share one atomic database mechanism.
@@ -74,6 +75,8 @@ export async function POST(request: Request) {
             : 500;
       return NextResponse.json({ error: msg }, { status });
     }
+
+    await endActiveMatchCalls(supabaseAdmin, matchId);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -10,7 +10,11 @@
     "test": "npx tsc --module commonjs --moduleResolution node --target es2022 --esModuleInterop --skipLibCheck --outDir .tmp-tests tests/matching.test.ts tests/unblur.test.ts && node --test .tmp-tests/tests/*.test.js"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.26",
+    "@livekit/components-styles": "^1.2.0",
     "@supabase/supabase-js": "^2.49.1",
+    "livekit-client": "^2.25.0",
+    "livekit-server-sdk": "^2.20.1",
     "next": "^15.5.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

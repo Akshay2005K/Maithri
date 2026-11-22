@@ -23,7 +23,8 @@ An intentional dating web application built for the **eLitmus Software Developer
 
 - **Framework:** Next.js 15 (App Router, TypeScript)
 - **Styling:** Tailwind CSS
-- **Backend / Auth / Database:** Supabase (Supabase Auth + PostgreSQL with Row Level Security)
+- **Backend / Auth / Database:** Supabase (Supabase Auth + PostgreSQL with Row Level Security + Realtime)
+- **Voice & Video Calling:** LiveKit Cloud (`livekit-server-sdk`, `livekit-client`, `@livekit/components-react`)
 - **Hosting:** Vercel
 
 ```text
@@ -109,7 +110,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 4. **Unified Pass & Unmatch (`Matches.tsx`, `Chat.tsx`, `/api/match-action`):**
    - **Pass (zero messages only):** Available on match cards and in chat when no messages exist. Quietly removes the match for both people (with a 6-second `"Passed. Undo"` toast on cards) and prevents future re-matching. If a message arrives before Pass completes, the API returns `409` and prompts the user to open chat to unmatch.
    - **Unmatch (once messages exist):** Available only inside Chat once at least one message exists. Requires choosing one of four fixed polite closure messages, hides the match for the user who unmatched, and notifies the other person (`"Unmatched"`, `"This match has ended."`, read-only chat history, and a `"Remove from my list"` button).
-5. **Report & Block:** Clicking **Report and block** lets the user select a reason and insert into `reports_blocks` (`reporter_id = currentUser.id`, `reported_id = partner.id`). `onBlocked()` immediately exits the chat and RLS + `/api/matches` prevent either user from reading/sending messages or matching again.
+5. **Report & Block:** Clicking **Report and block** lets the user select a reason and calls `POST /api/block` to insert into `reports_blocks` (`reporter_id = currentUser.id`, `reported_id = partner.id`) and immediately end any active call. `onBlocked()` immediately exits the chat and RLS + `/api/matches` prevent either user from reading/sending messages or matching again.
+6. **Voice & Video Calling (`CallPanel.tsx`, `src/lib/livekitServer.ts`, `/api/calls/*`):**
+   - **Gating:** Voice calls unlock at **Level 2**; video calls unlock at **Level 3** (enforced on the server in `/api/calls/start`). Blocked, unmatched, or passed pairs cannot start or accept calls, and unmatching/blocking ends any active call and deletes its room.
+   - **Room & Token Rules:** Rooms are created with random unguessable names, capped at 2 participants, with no recording/egress. Short-lived tokens (45 minutes) bind `identity` to the user's ID, `name` to first name only, and restrict voice calls to microphone-only publishing via `canPublishSources`.
+   - **Rate Limit:** Maximum **10 call starts per user per hour** and **1 active/ringing call per match**.
+   - **Graceful Fallback:** If `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, or `NEXT_PUBLIC_LIVEKIT_URL` is missing, Call buttons are hidden cleanly without errors.
 
 ### F. Mock Paywall (`PaywallModal.tsx`, `Matches.tsx`)
 - When `!profile.is_plus_mock && todaysMatches.length >= 3`, `Matches.tsx` shows an **Unlock 4th Daily Match (Mock Paywall)** card labeled `"Mock paywall, no payment"`.
@@ -146,6 +152,10 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 5. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are unguessable 128-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
 6. **Mock paywall & no formal legal review:** The 4th daily match unlock is a mock toggle with no real payment processor (`is_plus_mock` is a demo flag — without the `migrations_improvements.sql` trigger, `profiles` RLS allows client-side edits; with it, `/api/mock-plus` handles the free toggle), and the DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
 7. **Unified Pass & Unmatch limits:** Closure messages on Unmatch are a fixed set of four polite options (no free text), and a silent **Pass** on a zero-message match can still be noticed by the other person if they already viewed their list before refreshing.
+8. **Voice & Video Calling (LiveKit Cloud):**
+   - Free-plan limits apply; see [LiveKit Pricing](https://livekit.io/pricing) for current quotas and limits.
+   - Audio-only enforcement on voice calls depends on LiveKit token `canPublishSources` permissions (`TrackSource.MICROPHONE`).
+   - Calls may fail on restrictive corporate/campus firewalls or symmetric NAT networks that block WebRTC UDP/ICE traffic.
 
 ---
 
@@ -158,7 +168,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, and `supabase/migrations_pass_unmatch.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, and `supabase/migrations_calls_realtime.sql` in **SQL Editor**.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:
@@ -166,8 +176,11 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-server-only
+   NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
+   LIVEKIT_API_KEY=your-livekit-api-key-server-only
+   LIVEKIT_API_SECRET=your-livekit-api-secret-server-only
    ```
-   *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY` in client code.)*
+   *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY`, or `LIVEKIT_API_SECRET` in client code.)*
 
 4. **Seed the 16 demo users (requires Node 22+):**
    ```bash
@@ -196,5 +209,6 @@ Shared password for all seeded accounts: `elitmus2026`
 
 ## 8. Disclosures
 
-- **Libraries & services used:** Next.js, React, TypeScript, Tailwind CSS, `@supabase/supabase-js`, Supabase (Auth + PostgreSQL), Vercel.
+- **Libraries & services used:** Next.js, React, TypeScript, Tailwind CSS, `@supabase/supabase-js`, Supabase (Auth + PostgreSQL + Realtime), LiveKit Cloud (`livekit-server-sdk`, `livekit-client`, `@livekit/components-react`), Vercel.
+- **Third-party calling disclosure:** 1-on-1 voice and video calls are routed through **LiveKit Cloud (EU region)**. pHavelength does not record or store call audio/video content; only call metadata (`calls` table) is persisted.
 - **Design & layout disclosure:** The two-column onboarding and edit-profile layout (with an `"Optional"` divider, pill/row option pickers, and a centered primary action button) is inspired by common dating-app onboarding patterns. All copy, color tokens (`Dusk`, `Fog`, `Ink`, `Teal`, `Marigold`), typography (`Bricolage Grotesque` and `Literata`), and SVG illustrations are original to pHavelength.

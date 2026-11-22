@@ -19,6 +19,7 @@ import {
 } from "@/lib/closureReasons";
 import WavePair from "@/components/WavePair";
 import UnmatchDialog from "@/components/UnmatchDialog";
+import CallPanel from "@/components/CallPanel";
 
 interface MessageRow {
   id: string;
@@ -371,16 +372,34 @@ export default function Chat({
     setError(null);
     setBlocking(true);
 
-    const { error: blockErr } = await supabase.from("reports_blocks").insert({
-      reporter_id: currentUser.id,
-      reported_id: partner.id,
-      reason: reportReason,
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setBlocking(false);
+      setError("Sign in again before blocking.");
+      return;
+    }
+
+    const res = await fetch("/api/block", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        reportedId: partner.id,
+        reason: reportReason,
+        matchId,
+      }),
     });
 
+    const body = await res.json().catch(() => ({}));
     setBlocking(false);
 
-    if (blockErr) {
-      setError(`${blockErr.message} Please try blocking again.`);
+    if (!res.ok) {
+      setError(`${body.error || "Could not block user."} Please try blocking again.`);
       return;
     }
 
@@ -770,6 +789,15 @@ export default function Chat({
                 <li>Level 3: Unblurred at 3+ valid messages total</li>
               </ul>
             </div>
+
+            {/* Voice / Video Call (Voice at Level 2+, Video at Level 3) */}
+            <CallPanel
+              matchId={matchId}
+              currentUserId={currentUser.id}
+              partnerFirstName={partnerFirstName}
+              unblurLevel={unblur.level}
+              isClosed={isClosedByPartner}
+            />
 
             {/* Plan a meetup (Available only at unblur Level 3) */}
             <div className="space-y-3 rounded-lg border border-dusk/20 bg-dusk/5 p-4">

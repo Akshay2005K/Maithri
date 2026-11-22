@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { VALID_CLOSURE_REASON_KEYS } from "@/lib/closureReasons";
+import { endActiveMatchCalls } from "@/lib/callsServer";
 
 const ALLOWED_SET_ACTIONS = new Set([
   "like",
@@ -117,6 +118,8 @@ export async function POST(request: Request) {
         return mapRpcErrorToResponse(rpcErr.message);
       }
 
+      await endActiveMatchCalls(supabaseAdmin, matchId);
+
       return NextResponse.json({ ok: true, myAction: "unmatched" });
     }
 
@@ -128,6 +131,10 @@ export async function POST(request: Request) {
 
     if (rpcErr) {
       return mapRpcErrorToResponse(rpcErr.message);
+    }
+
+    if (action === "pass") {
+      await endActiveMatchCalls(supabaseAdmin, matchId);
     }
 
     return NextResponse.json({
