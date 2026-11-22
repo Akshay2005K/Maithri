@@ -14,7 +14,7 @@ An intentional dating web application built for the **eLitmus Software Developer
 
 ### Simulated vs. Real (Honest Disclosures)
 - **Simulated eLitmus verification:** This prototype does **not** connect to eLitmus's private candidate database. Batch/verification badges are simulated and explicitly labeled `"Simulated eLitmus verification (prototype)"` in the UI, designed to plug into eLitmus data later. Company domains are self-declared.
-- **Sandbox-only payments:** The `/upgrade` page offers **Free** (₹0/month), **Plus** (₹199/month), and **Pro** (₹349/month) tiers powered by **Cashfree Sandbox** (`"Test mode: no real money is charged."`). Payment routes refuse to run unless `CASHFREE_ENV=sandbox` and `CASHFREE_APP_ID` starts with `TEST_`.
+- **Sandbox-only payments:** The `/upgrade` page offers **Free** (₹0/month), **Plus** (₹199/month), and **Pro** (₹349/month) tiers powered by **Cashfree Sandbox** (`"Test mode: no real money is charged."`). Payment routes refuse to run unless `CASHFREE_ENV=sandbox` and `CASHFREE_APP_ID` starts with `TEST`.
 - **Illustration avatars only:** All profiles use local geometric/illustrated SVG avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`), with no photos of real people.
 
 ---

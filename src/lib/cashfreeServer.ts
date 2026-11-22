@@ -24,7 +24,7 @@ export function getCashfreeSandboxConfig(): {
   const appId = process.env.CASHFREE_APP_ID?.trim() || "";
   const secretKey = process.env.CASHFREE_SECRET_KEY?.trim() || "";
 
-  if (env !== "sandbox" || !appId.startsWith("TEST_") || !secretKey) {
+  if (env !== "sandbox" || !appId.startsWith("TEST") || !secretKey) {
     throw new CashfreeSandboxError(
       "Payments are available in sandbox test mode only.",
       503

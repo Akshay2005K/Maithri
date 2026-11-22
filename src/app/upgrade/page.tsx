@@ -113,7 +113,7 @@ export default function UpgradePage() {
   async function handleChoosePlan(targetPlan: "plus" | "pro") {
     setErrorMsg(null);
 
-    if (process.env.NEXT_PUBLIC_CASHFREE_MODE !== "sandbox") {
+    if (process.env.NEXT_PUBLIC_CASHFREE_MODE?.trim() !== "sandbox") {
       setErrorMsg("Payments are available in sandbox test mode only.");
       return;
     }
