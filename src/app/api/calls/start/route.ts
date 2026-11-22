@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUnblurStatus } from "@/lib/unblur";
+import { canStartCall, getRequiredPlanForCall } from "@/lib/entitlements";
 import {
   createLiveKitRoom,
   createLiveKitToken,
@@ -106,6 +107,28 @@ export async function POST(request: Request) {
       );
     }
 
+    // Plan check comes first (computed from DB, never from request body)
+    const { data: profileRow } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, plan")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!canStartCall(profileRow?.plan, callType)) {
+      const requiredPlan = getRequiredPlanForCall(callType);
+      return NextResponse.json(
+        {
+          code: "upgrade_required",
+          required_plan: requiredPlan,
+          error:
+            requiredPlan === "pro"
+              ? "Video calls are part of Pro."
+              : "Voice calls are part of Plus and Pro.",
+        },
+        { status: 403 }
+      );
+    }
+
     // Server-side unblur gating: audio requires level >= 2, video requires level 3
     const { data: msgs } = await supabaseAdmin
       .from("messages")
@@ -116,6 +139,8 @@ export async function POST(request: Request) {
     if (callType === "audio" && unblur.level < 2) {
       return NextResponse.json(
         {
+          code: "not_unlocked_yet",
+          required_level: 2,
           error:
             "Voice calls unlock at Level 2 after mutual conversation progress.",
         },
@@ -125,6 +150,8 @@ export async function POST(request: Request) {
     if (callType === "video" && unblur.level < 3) {
       return NextResponse.json(
         {
+          code: "not_unlocked_yet",
+          required_level: 3,
           error:
             "Video calls unlock at Level 3 after 3+ valid messages from both sides.",
         },
@@ -169,12 +196,6 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-
-    const { data: profileRow } = await supabaseAdmin
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .maybeSingle();
 
     const roomName = generateCallRoomName();
     const serverUrl = getLiveKitServerUrl();

@@ -36,8 +36,10 @@ interface CallPanelProps {
   matchId: string;
   currentUserId: string;
   partnerFirstName: string;
-  unblurLevel: number;
   isClosed: boolean;
+  startRequest?: { callType: "audio" | "video"; seq: number } | null;
+  onUpgradeRequired?: (plan: "plus" | "pro") => void;
+  onNotUnlockedYet?: (requiredLevel: 2 | 3) => void;
 }
 
 function describeMediaFailure(
@@ -215,8 +217,10 @@ export default function CallPanel({
   matchId,
   currentUserId,
   partnerFirstName,
-  unblurLevel,
   isClosed,
+  startRequest,
+  onUpgradeRequired,
+  onNotUnlockedYet,
 }: CallPanelProps) {
   const [callingEnabled, setCallingEnabled] = useState<boolean | null>(
     process.env.NEXT_PUBLIC_LIVEKIT_URL ? null : false
@@ -309,6 +313,12 @@ export default function CallPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, callingEnabled, partnerFirstName]);
 
+  useEffect(() => {
+    if (!startRequest || !callingEnabled) return;
+    handleStartCall(startRequest.callType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startRequest?.seq]);
+
   async function handleStartCall(callType: "audio" | "video") {
     setError(null);
     setStatusNotice(null);
@@ -330,6 +340,20 @@ export default function CallPanel({
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (
+          body.code === "upgrade_required" &&
+          (body.required_plan === "plus" || body.required_plan === "pro")
+        ) {
+          onUpgradeRequired?.(body.required_plan);
+          return;
+        }
+        if (
+          body.code === "not_unlocked_yet" &&
+          (body.required_level === 2 || body.required_level === 3)
+        ) {
+          onNotUnlockedYet?.(body.required_level);
+          return;
+        }
         throw new Error(body.error || "Could not start call.");
       }
 
@@ -396,10 +420,10 @@ export default function CallPanel({
 
   if (isClosed || callingEnabled !== true) return null;
 
-  const canVoiceCall = unblurLevel >= 2;
-  const canVideoCall = unblurLevel >= 3;
   const isCaller = activeCall?.caller_id === currentUserId;
   const isIncoming = activeCall?.status === "ringing" && !isCaller;
+
+  if (!activeCall && !statusNotice && !error) return null;
 
   return (
     <div className="space-y-3 rounded-lg border border-dusk/20 bg-dusk/5 p-4">
@@ -412,45 +436,7 @@ export default function CallPanel({
         </p>
       </div>
 
-      {!activeCall ? (
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={busy || !canVoiceCall}
-              title={
-                canVoiceCall
-                  ? undefined
-                  : "Unlocks at Level 2 after mutual messages"
-              }
-              onClick={() => handleStartCall("audio")}
-              className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded border border-dusk/30 bg-fog px-3 text-xs font-medium text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-            >
-              Voice call
-            </button>
-            <button
-              type="button"
-              disabled={busy || !canVideoCall}
-              title={
-                canVideoCall
-                  ? undefined
-                  : "Unlocks at Level 3 after 3+ valid messages each"
-              }
-              onClick={() => handleStartCall("video")}
-              className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded bg-dusk px-3 text-xs font-medium text-fog transition-colors hover:bg-dusk/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-            >
-              Video call
-            </button>
-          </div>
-          {(!canVoiceCall || !canVideoCall) && (
-            <p className="text-[11px] leading-relaxed text-ink/75">
-              {!canVoiceCall
-                ? "Voice calls unlock at Level 2; video calls unlock at Level 3."
-                : "Voice calls are unlocked. Video calls unlock at Level 3."}
-            </p>
-          )}
-        </div>
-      ) : isIncoming ? (
+      {!activeCall ? null : isIncoming ? (
         <div className="space-y-2.5 rounded border border-teal bg-teal/15 p-3 text-xs">
           <p className="font-semibold text-dusk">
             Incoming {activeCall.call_type === "audio" ? "voice" : "video"} call

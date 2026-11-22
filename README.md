@@ -14,7 +14,7 @@ An intentional dating web application built for the **eLitmus Software Developer
 
 ### Simulated vs. Real (Honest Disclosures)
 - **Simulated eLitmus verification:** This prototype does **not** connect to eLitmus's private candidate database. Batch/verification badges are simulated and explicitly labeled `"Simulated eLitmus verification (prototype)"` in the UI, designed to plug into eLitmus data later. Company domains are self-declared.
-- **Mock paywall:** The `"Unlock 4th Daily Match (Mock Paywall)"` modal is labeled `"Mock paywall, no payment"`. Clicking it flips a boolean (`is_plus_mock = true`) on `profiles` with zero real money charged.
+- **Mock plans & upgrades:** The `/upgrade` page offers **Free** (₹0/month), **Plus** (₹199/month), and **Pro** (₹349/month) tiers labeled `"Prototype: no payment is taken."` Upgrading calls `POST /api/plan/upgrade` to update `profiles.plan` on the server with zero real money charged.
 - **Illustration avatars only:** All profiles use local geometric/illustrated SVG avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`), with no photos of real people.
 
 ---
@@ -46,13 +46,16 @@ src/
     AuthForm.tsx                    # Email/password Sign In & Sign Up + demo credentials box
     Onboarding.tsx                  # Avatar picker, profile fields, Privacy Shield, 18+ gate, DPDP consent
     Quiz.tsx                        # 5-question compatibility quiz (1–5 scale)
-    Matches.tsx                     # Daily curated matches, Privacy Shield counter, mock paywall trigger
-    Chat.tsx                        # Polling chat, 4+ word enforcement, unblur bar, Report & Block
-    PaywallModal.tsx                # Mock ₹199/mo Plus paywall toggle
+    Matches.tsx                     # Daily curated matches, Privacy Shield counter, Upgrade link
+    Chat.tsx                        # Live chat, 4+ word enforcement, unblur bar, Report & Block, call actions
+    CallPanel.tsx                   # LiveKit voice/video call UI, ringing flow, Realtime sync
+    UpgradeCallDialog.tsx           # Accessible dialog prompting Plus/Pro upgrade on locked call actions
   app/
     layout.tsx                      # Root layout + persistent footer (Grievance, Privacy, Terms)
     page.tsx                        # Main state router (Auth -> Onboarding -> Quiz -> Matches <-> Chat + Delete Account)
+    upgrade/page.tsx                # Plans & mock upgrade page (Free / Plus / Pro)
     api/delete-account/route.ts     # Server-only POST route verifying JWT and deleting auth.users row
+    api/plan/upgrade/route.ts       # Server-only POST route for mock upward plan upgrades
     privacy/page.tsx                # Privacy Policy page
     terms/page.tsx                  # Terms of Use page
     grievance/page.tsx              # Grievance & Safety Contact page
@@ -117,9 +120,13 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    - **Rate Limit:** Maximum **10 call starts per user per hour** and **1 active/ringing call per match**.
    - **Graceful Fallback:** If `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, or `NEXT_PUBLIC_LIVEKIT_URL` is missing, Call buttons are hidden cleanly without errors.
 
-### F. Mock Paywall (`PaywallModal.tsx`, `Matches.tsx`)
-- When `!profile.is_plus_mock && todaysMatches.length >= 3`, `Matches.tsx` shows an **Unlock 4th Daily Match (Mock Paywall)** card labeled `"Mock paywall, no payment"`.
-- Clicking **Simulate Plus Unlock (Free Demo)** sets `is_plus_mock = true` on `profiles` and triggers `Matches` to unlock the 4th daily slot (`4/4`) if an eligible candidate remains.
+### F. Plans & Mock Upgrades (`src/lib/entitlements.ts`, `src/lib/plans.ts`, `/upgrade`, `Matches.tsx`)
+- **Three Tiers (`profiles.plan`):**
+  - **Free (₹0/month):** Curated daily matches (3/day) and text messaging (4+ words).
+  - **Plus (₹199/month):** 4 curated daily matches/day, text messaging, and **voice calls** (unlocked at unblur Level 2+).
+  - **Pro (₹349/month):** 4 curated daily matches/day, text messaging, **voice calls** (Level 2+), and **video calls** (unlocked at unblur Level 3).
+- **Caller-Pays Rule for Calls:** The caller's plan decides whether a voice or video call can start (`/api/calls/start` checks plan first, then unblur level). The receiver can accept an incoming call on **any** plan (`/api/calls/accept`).
+- **Mock Upgrade Flow:** On `/upgrade` (reachable from the top nav/menu `"Upgrade"` / `"Plans"` or the `"Upgrade"` card on `Matches` when a free user hits 3/3 matches), choosing a higher tier calls `POST /api/plan/upgrade` (`free -> plus | pro`, `plus -> pro`; no payment is taken).
 
 ### G. Delete My Account & Legal/Safety Pages (`api/delete-account/route.ts`, `privacy`, `terms`, `grievance`)
 - **Delete My Account:** Clicking **Delete My Account** → **Yes, Delete Permanently** sends `POST /api/delete-account` with `Authorization: Bearer <access_token>`. The server route uses `getSupabaseAdmin()` (`SUPABASE_SERVICE_ROLE_KEY`) to verify the JWT via `supabaseAdmin.auth.getUser(token)` and calls `supabaseAdmin.auth.admin.deleteUser(user.id)`. Postgres `ON DELETE CASCADE` deletes the user's `profiles`, `matches`, `messages`, and `reports_blocks` rows.
@@ -130,7 +137,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 ## 4. Database Schema & Row Level Security (`supabase/schema.sql`, `supabase/policies.sql`)
 
 ### Tables
-- `profiles` (`id` FK → `auth.users(id) on delete cascade`, `age >= 18`, `batch between 2020 and 2024`, `q1..q5 between 1 and 5`, `dpdp_consent_at`, `is_plus_mock`, Privacy Shield booleans)
+- `profiles` (`id` FK → `auth.users(id) on delete cascade`, `age >= 18`, `batch between 2020 and 2024`, `q1..q5 between 1 and 5`, `dpdp_consent_at`, `plan` `'free' | 'plus' | 'pro'`, Privacy Shield booleans)
 - `matches` (`id`, `user_a` FK, `user_b` FK, `compatibility_score`, `match_date default current_date`, `unique (user_a, user_b)`)
 - `messages` (`id`, `match_id` FK, `sender_id` FK, `content`, `created_at`)
 - `reports_blocks` (`id`, `reporter_id` FK, `reported_id` FK, `reason`, `created_at`)
@@ -150,7 +157,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 3. **Illustration avatars instead of photos (and CSS-only blur):** All profiles use local SVG illustration avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`) instead of real user photo uploads. Photo blur (`blur-xl` / `blur-md` / `blur-none`) is applied visually in CSS while the SVG URL remains in the DOM; a production system with real photos would store pre-blurred assets and serve signed URLs on the server.
 4. **Self-declared workplace, college, and batch:** Company domains, college names, role titles, and eLitmus batches are self-declared; no live eLitmus candidate database API or corporate email verification is integrated.
 5. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are unguessable 128-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
-6. **Mock paywall & no formal legal review:** The 4th daily match unlock is a mock toggle with no real payment processor (`is_plus_mock` is a demo flag — without the `migrations_improvements.sql` trigger, `profiles` RLS allows client-side edits; with it, `/api/mock-plus` handles the free toggle), and the DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
+6. **Mock plan upgrades & no downgrade path:** Plan upgrades on `/upgrade` are a mock prototype with no real payment processor and no downgrade path (`free -> plus | pro`, `plus -> pro`). Plan data lives in `profiles.plan` and is protected by a `BEFORE INSERT OR UPDATE` trigger (`trg_enforce_profile_plan_guard`) so only `service_role` or `postgres` can modify it. The DPDP-inspired privacy/terms/grievance/safety pages have not undergone formal legal review.
 7. **Unified Pass & Unmatch limits:** Closure messages on Unmatch are a fixed set of four polite options (no free text), and a silent **Pass** on a zero-message match can still be noticed by the other person if they already viewed their list before refreshing.
 8. **Voice & Video Calling (LiveKit Cloud):**
    - Free-plan limits apply; see [LiveKit Pricing](https://livekit.io/pricing) for current quotas and limits.
@@ -168,7 +175,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, and `supabase/migrations_calls_realtime.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, and `supabase/migrations_plans.sql` in **SQL Editor**.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:
@@ -199,11 +206,13 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 Shared password for all seeded accounts: `elitmus2026`
 
-- **Demo 1 (Man, looking for women, Bengaluru, `flipkart.com`):** `aarav@elitmus-demo.in`
-- **Demo 2 (Woman, looking for men, Bengaluru, `razorpay.com`):** `anya@elitmus-demo.in` *(shares a pre-seeded Level-2 match and 2 starter messages with Aarav)*
+- **Demo 1 (Free plan — Man, looking for women, Bengaluru, `flipkart.com`):** `aarav@elitmus-demo.in` *(Level-2 match with Anya; Level-3 match with Priya)*
+- **Demo 2 (Free plan — Woman, looking for men, Bengaluru, `razorpay.com`):** `anya@elitmus-demo.in` *(shares a pre-seeded Level-2 match and 2 starter messages with Aarav)*
+- **Demo 3 (Plus plan — Man, looking for women, Bengaluru, `swiggy.in`):** `rohan@elitmus-demo.in` *(Level-3 match with `kriti@elitmus-demo.in` for voice-call testing)*
+- **Demo 4 (Pro plan — Man, looking for everyone, Bengaluru, `postman.com`):** `vikram@elitmus-demo.in` *(Level-3 match with `sneha@elitmus-demo.in` for voice & video-call testing)*
 - **Beyond binary / Everyone filter test (Beyond binary, looking for everyone, Bengaluru):** `arjun@elitmus-demo.in`
 - **Privacy Shield Test (Woman, Bengaluru, `flipkart.com`):** `divya@elitmus-demo.in` *(hidden from Aarav when Privacy Shield is ON)*
-- **Additional seeded candidates:** `kriti@elitmus-demo.in`, `meera@elitmus-demo.in`, `priya@elitmus-demo.in`, `sneha@elitmus-demo.in`, `neha@elitmus-demo.in`, `tara@elitmus-demo.in`, `riya@elitmus-demo.in`, `rohan@elitmus-demo.in`, `vikram@elitmus-demo.in`, `dev@elitmus-demo.in`, `kabir@elitmus-demo.in`, `siddharth@elitmus-demo.in`
+- **Additional seeded candidates:** `kriti@elitmus-demo.in`, `meera@elitmus-demo.in`, `priya@elitmus-demo.in`, `sneha@elitmus-demo.in`, `neha@elitmus-demo.in`, `tara@elitmus-demo.in`, `riya@elitmus-demo.in`, `dev@elitmus-demo.in`, `kabir@elitmus-demo.in`, `siddharth@elitmus-demo.in`
 
 ---
 

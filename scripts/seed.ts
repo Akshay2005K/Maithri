@@ -44,6 +44,7 @@ interface SeedUser {
   q3: number;
   q4: number;
   q5: number;
+  plan?: "free" | "plus" | "pro";
 }
 
 const SEED_USERS: SeedUser[] = [
@@ -503,6 +504,7 @@ const SEED_USERS: SeedUser[] = [
   {
     email: "rohan@elitmus-demo.in",
     full_name: "Rohan Verma",
+    plan: "plus",
     age: 26,
     birth_date: "2000-06-11",
     gender: "man",
@@ -547,6 +549,7 @@ const SEED_USERS: SeedUser[] = [
   {
     email: "vikram@elitmus-demo.in",
     full_name: "Vikram Joshi",
+    plan: "pro",
     age: 25,
     birth_date: "2001-11-02",
     gender: "man",
@@ -962,7 +965,7 @@ async function runSeed() {
       q5: user.q5,
       dpdp_consent_at: now,
       house_rules_accepted_at: now,
-      is_plus_mock: false,
+      plan: user.plan ?? "free",
     });
 
     if (profileErr) throw profileErr;
@@ -1037,6 +1040,66 @@ async function runSeed() {
       console.log("Seeded zero-message match between Aarav and Meera.");
     }
   }
+
+  // Seed Level 3 matches (4 valid 4+ word messages, 2 from each side) for Free, Plus, and Pro testing
+  async function seedLevel3Match(
+    emailA: string,
+    emailB: string,
+    score: number,
+    msgs: { fromA: boolean; content: string }[]
+  ) {
+    const idA = idByEmail[emailA];
+    const idB = idByEmail[emailB];
+    if (!idA || !idB) return;
+
+    const { data: existing } = await supabaseAdmin
+      .from("matches")
+      .select("id")
+      .or(
+        `and(user_a.eq.${idA},user_b.eq.${idB}),and(user_a.eq.${idB},user_b.eq.${idA})`
+      )
+      .maybeSingle();
+
+    if (existing) return;
+
+    const { data: inserted, error: err } = await supabaseAdmin
+      .from("matches")
+      .insert({ user_a: idA, user_b: idB, compatibility_score: score })
+      .select("id")
+      .single();
+    if (err) throw err;
+
+    await supabaseAdmin.from("messages").insert(
+      msgs.map((m) => ({
+        match_id: inserted.id,
+        sender_id: m.fromA ? idA : idB,
+        content: m.content,
+        reply_to_prompt_key: null,
+      }))
+    );
+    console.log(`Seeded Level 3 match between ${emailA} and ${emailB}.`);
+  }
+
+  await seedLevel3Match("aarav@elitmus-demo.in", "priya@elitmus-demo.in", 92, [
+    { fromA: true, content: "Hey Priya, how was your weekend hike near Nandi Hills?" },
+    { fromA: false, content: "It was great Aarav, we caught the sunrise right above the clouds." },
+    { fromA: true, content: "That sounds amazing! Which trail did you end up taking?" },
+    { fromA: false, content: "We took the main steps early morning before the crowd arrived." },
+  ]);
+
+  await seedLevel3Match("rohan@elitmus-demo.in", "kriti@elitmus-demo.in", 94, [
+    { fromA: true, content: "Hi Kriti, loved your note about weekend board game nights." },
+    { fromA: false, content: "Thanks Rohan! Do you play Catan or more strategy card games?" },
+    { fromA: true, content: "Mostly Catan and Ticket to Ride with a small group in Indiranagar." },
+    { fromA: false, content: "Nice, we should definitely compare favorite board games sometime soon." },
+  ]);
+
+  await seedLevel3Match("vikram@elitmus-demo.in", "sneha@elitmus-demo.in", 96, [
+    { fromA: true, content: "Hey Sneha, saw you also enjoy filter coffee walks on Sundays." },
+    { fromA: false, content: "Yes Vikram! Always looking for new quiet cafes around Koramangala." },
+    { fromA: true, content: "Have you tried the small roastery near third block yet?" },
+    { fromA: false, content: "Not yet, let us plan a quick catch-up there next weekend." },
+  ]);
 
   // Revoke any previously unmatched flags so all prior matches are restored
   const { error: revokeErr } = await supabaseAdmin

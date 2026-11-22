@@ -7,6 +7,7 @@ import {
 } from "./supabase";
 import { getDisplayedAge } from "./profileOptions";
 import { getUnblurStatus } from "./unblur";
+import { getEntitlements } from "./entitlements";
 
 export interface CompatibilityFactor {
   key: "q1" | "q2" | "q3" | "q4" | "q5";
@@ -240,7 +241,7 @@ export async function getOrCreateTodaysMatchesForUser(
   const todaysRows = activeExisting.filter((m) => m.match_date === today);
   const earlierRows = activeExisting.filter((m) => m.match_date !== today);
 
-  const dailyCap = me.is_plus_mock ? 4 : 3;
+  const dailyCap = getEntitlements(me.plan).dailyMatches;
   const slotsNeeded = Math.max(0, dailyCap - todaysCreatedCount);
 
   // Filter eligible candidates & count Privacy Shield removals

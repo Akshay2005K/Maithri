@@ -33,7 +33,7 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
     q4: 5,
     q5: 4,
     dpdp_consent_at: "2026-01-01T00:00:00Z",
-    is_plus_mock: false,
+    plan: "free" as const,
     ...overrides,
   };
 }

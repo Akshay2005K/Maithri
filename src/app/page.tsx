@@ -10,6 +10,7 @@ import {
   type RelationshipGoal,
 } from "@/lib/supabase";
 import type { MatchWithProfile } from "@/lib/matching";
+import { normalizePlan } from "@/lib/entitlements";
 import AuthForm from "@/components/AuthForm";
 import Onboarding from "@/components/Onboarding";
 import Quiz from "@/components/Quiz";
@@ -205,7 +206,17 @@ export default function HomePage() {
             </button>
 
             {user ? (
-              <div className="flex items-center">
+              <div className="flex items-center gap-2">
+                {canNavigateMain && (
+                  <Link
+                    href="/upgrade"
+                    className="hidden min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none sm:inline-flex"
+                  >
+                    {normalizePlan(profile?.plan) === "pro"
+                      ? "Plans"
+                      : "Upgrade"}
+                  </Link>
+                )}
                 <button
                   type="button"
                   aria-label={menuOpen ? "Close menu" : "Open menu"}
@@ -274,6 +285,13 @@ export default function HomePage() {
                   Profile
                 </button>
               )}
+              <Link
+                href="/upgrade"
+                onClick={() => setMenuOpen(false)}
+                className="flex min-h-[44px] w-full items-center rounded px-3 text-left text-sm font-medium text-ink hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2"
+              >
+                {normalizePlan(profile?.plan) === "pro" ? "Plans" : "Upgrade"}
+              </Link>
               <Link
                 href="/settings"
                 onClick={() => setMenuOpen(false)}

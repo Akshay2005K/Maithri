@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   supabase,
   getRelationshipGoalLabel,
@@ -13,7 +14,7 @@ import {
 } from "@/lib/profileOptions";
 import type { MatchWithProfile } from "@/lib/matching";
 import { getUnblurStatus, type UnblurStatus } from "@/lib/unblur";
-import PaywallModal from "@/components/PaywallModal";
+import { getEntitlements, normalizePlan } from "@/lib/entitlements";
 import WavePair from "@/components/WavePair";
 
 interface MatchesProps {
@@ -45,7 +46,6 @@ export default function Matches({
   const [filterMode, setFilterMode] = useState<"all" | "like" | "save">("all");
   const [hiddenCount, setHiddenCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [showPaywall, setShowPaywall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -321,7 +321,7 @@ export default function Matches({
       <div className="border-b border-dusk/15 pb-5">
         <h1 className="text-2xl font-bold text-dusk">
           Today&apos;s curated matches ({todaysMatches.length}/
-          {profile.is_plus_mock ? 4 : 3})
+          {getEntitlements(profile.plan).dailyMatches})
         </h1>
         <p className="mt-1 text-sm text-ink/80">
           Generated on open from your compatibility quiz and city (
@@ -349,10 +349,13 @@ export default function Matches({
         </p>
       </div>
 
-      {profile.is_plus_mock && (
+      {normalizePlan(profile.plan) !== "free" && (
         <div className="rounded-lg border border-marigold bg-marigold/20 px-4 py-2.5 text-sm text-ink">
-          <strong>Mock Plus active:</strong> fourth daily match slot unlocked
-          (no payment).
+          <strong>
+            {normalizePlan(profile.plan) === "pro" ? "Pro" : "Plus"} plan
+            active:
+          </strong>{" "}
+          fourth daily match slot unlocked (no payment).
         </div>
       )}
 
@@ -468,8 +471,8 @@ export default function Matches({
         </div>
       )}
 
-      {/* 4th Match Mock Paywall Trigger */}
-      {!profile.is_plus_mock && todaysMatches.length >= 3 && (
+      {/* Daily Free Cap Reached -> Upgrade Link */}
+      {normalizePlan(profile.plan) === "free" && todaysMatches.length >= 3 && (
         <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-marigold bg-marigold/15 p-5 sm:flex-row sm:items-center">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-dusk">
@@ -478,31 +481,16 @@ export default function Matches({
             <p className="text-sm text-ink/85">
               {hasMore
                 ? "A fourth compatible match is available today."
-                : "Unlocking Plus raises your daily cap to 4 matches."}
-            </p>
-            <p className="text-xs font-medium text-ink/75">
-              Mock paywall, no payment
+                : "Upgrading to Plus or Pro raises your daily cap to 4 matches."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowPaywall(true)}
-            className="inline-flex min-h-[44px] shrink-0 items-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog hover:bg-dusk/90"
+          <Link
+            href="/upgrade"
+            className="inline-flex min-h-[44px] shrink-0 items-center rounded bg-dusk px-4 py-2 text-sm font-medium text-fog transition-colors hover:bg-dusk/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none"
           >
-            Unlock 4th daily match
-          </button>
+            Upgrade
+          </Link>
         </div>
-      )}
-
-      {showPaywall && (
-        <PaywallModal
-          profile={profile}
-          onClose={() => setShowPaywall(false)}
-          onUnlocked={(updated) => {
-            setShowPaywall(false);
-            onProfileUpdated(updated);
-          }}
-        />
       )}
 
       {undoToast && (

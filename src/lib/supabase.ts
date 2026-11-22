@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { PlanTier } from "./entitlements";
 import type { ProfileDetails } from "./profileOptions";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -95,6 +96,6 @@ export interface Profile extends SafePartnerProfile {
   q5: number | null;
   dpdp_consent_at: string;
   house_rules_accepted_at?: string | null;
-  is_plus_mock: boolean;
+  plan: PlanTier;
   created_at?: string;
 }

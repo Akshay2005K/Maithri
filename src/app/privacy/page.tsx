@@ -61,9 +61,11 @@ export default function PrivacyPage() {
                 acceptance (<code>house_rules_accepted_at</code>).
               </li>
               <li>
-                <strong>Self-declared work and Privacy Shield fields:</strong>{" "}
+                <strong>Self-declared work, plan, and Privacy Shield fields:</strong>{" "}
                 batch year, role title, self-declared company domain, college
-                name, and your two Privacy Shield toggles.
+                name, your two Privacy Shield toggles, and your current
+                prototype plan tier (<code>profiles.plan</code>: Free, Plus, or
+                Pro).
               </li>
               <li>
                 <strong>

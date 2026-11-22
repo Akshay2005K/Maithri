@@ -19,7 +19,9 @@ import {
 } from "@/lib/closureReasons";
 import WavePair from "@/components/WavePair";
 import UnmatchDialog from "@/components/UnmatchDialog";
+import UpgradeCallDialog from "@/components/UpgradeCallDialog";
 import CallPanel from "@/components/CallPanel";
+import { canStartCall, getRequiredPlanForCall } from "@/lib/entitlements";
 
 interface MessageRow {
   id: string;
@@ -179,6 +181,31 @@ export default function Chat({
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [planMessage, setPlanMessage] = useState<string | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [callStartRequest, setCallStartRequest] = useState<{
+    callType: "audio" | "video";
+    seq: number;
+  } | null>(null);
+  const [callInlineNotice, setCallInlineNotice] = useState<string | null>(null);
+  const [upgradeDialogPlan, setUpgradeDialogPlan] = useState<
+    "plus" | "pro" | null
+  >(null);
+
+  function handleCallButtonClick(callType: "audio" | "video") {
+    setCallInlineNotice(null);
+    if (!canStartCall(currentUser.plan, callType)) {
+      setUpgradeDialogPlan(getRequiredPlanForCall(callType));
+      return;
+    }
+    if (callType === "audio" && unblur.level < 2) {
+      setCallInlineNotice("Keep chatting to unlock voice calls");
+      return;
+    }
+    if (callType === "video" && unblur.level < 3) {
+      setCallInlineNotice("Keep chatting to unlock video calls");
+      return;
+    }
+    setCallStartRequest((prev) => ({ callType, seq: (prev?.seq ?? 0) + 1 }));
+  }
 
   async function fetchMessages() {
     const [{ data, error: fetchErr }, { data: planData }] = await Promise.all([
@@ -795,8 +822,16 @@ export default function Chat({
               matchId={matchId}
               currentUserId={currentUser.id}
               partnerFirstName={partnerFirstName}
-              unblurLevel={unblur.level}
               isClosed={isClosedByPartner}
+              startRequest={callStartRequest}
+              onUpgradeRequired={(plan) => setUpgradeDialogPlan(plan)}
+              onNotUnlockedYet={(requiredLevel) =>
+                setCallInlineNotice(
+                  requiredLevel === 3
+                    ? "Keep chatting to unlock video calls"
+                    : "Keep chatting to unlock voice calls"
+                )
+              }
             />
 
             {/* Plan a meetup (Available only at unblur Level 3) */}
@@ -1237,23 +1272,152 @@ export default function Chat({
               >
                 Your message (4 words minimum)
               </label>
-              <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
+              <div className="mt-1.5 flex items-center gap-2">
                 <input
                   id="chat-message-input"
                   type="text"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder="Write at least four words..."
-                  className="min-h-[44px] flex-1 rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
+                  className="min-h-[44px] min-w-0 flex-1 rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2"
                 />
-                <button
-                  type="submit"
-                  disabled={sending}
-                  className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded bg-dusk px-5 text-sm font-medium text-fog hover:bg-dusk/90 disabled:opacity-50"
-                >
-                  {sending ? "Sending..." : "Send message"}
-                </button>
+                {(() => {
+                  const voiceAllowed = canStartCall(currentUser.plan, "audio");
+                  const videoAllowed = canStartCall(currentUser.plan, "video");
+                  return (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCallButtonClick("audio")}
+                        aria-label={
+                          voiceAllowed ? "Voice call" : "Voice call (Plus)"
+                        }
+                        title={voiceAllowed ? "Voice call" : "Plus"}
+                        className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-dusk/30 bg-fog text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none"
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                        </svg>
+                        {!voiceAllowed && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-dusk text-fog"
+                          >
+                            <svg
+                              width="8"
+                              height="8"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <rect x="3" y="11" width="18" height="11" rx="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCallButtonClick("video")}
+                        aria-label={
+                          videoAllowed ? "Video call" : "Video call (Pro)"
+                        }
+                        title={videoAllowed ? "Video call" : "Pro"}
+                        className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded border border-dusk/30 bg-fog text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none"
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polygon points="23 7 16 12 23 17 23 7" />
+                          <rect
+                            x="1"
+                            y="5"
+                            width="15"
+                            height="14"
+                            rx="2"
+                            ry="2"
+                          />
+                        </svg>
+                        {!videoAllowed && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-dusk text-fog"
+                          >
+                            <svg
+                              width="8"
+                              height="8"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <rect x="3" y="11" width="18" height="11" rx="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={sending}
+                        aria-label={
+                          sending ? "Sending message" : "Send message"
+                        }
+                        title="Send message"
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded bg-dusk text-fog transition-colors hover:bg-dusk/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none"
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <line x1="22" y1="2" x2="11" y2="13" />
+                          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
+              {callInlineNotice && (
+                <p
+                  role="status"
+                  className="mt-2 rounded border border-dusk/20 bg-dusk/5 px-3 py-2 text-xs font-medium text-dusk"
+                >
+                  {callInlineNotice}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/75">
@@ -1288,6 +1452,12 @@ export default function Chat({
         error={unmatchError}
         onConfirm={handleUnmatch}
         onClose={() => setShowUnmatchDialog(false)}
+      />
+
+      <UpgradeCallDialog
+        open={upgradeDialogPlan !== null}
+        requiredPlan={upgradeDialogPlan}
+        onClose={() => setUpgradeDialogPlan(null)}
       />
     </section>
   );
