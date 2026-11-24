@@ -178,7 +178,7 @@ export default function UpgradePage() {
 
   return (
     <>
-      <header className="border-b border-dusk/15 bg-fog">
+      <header className="sticky top-0 z-30 border-b border-dusk/15 bg-fog/80 backdrop-blur-md">
         <div className="mx-auto flex min-h-[64px] w-full max-w-[1100px] items-center justify-between gap-4 px-4 sm:px-6">
           <Link
             href="/"
@@ -256,10 +256,12 @@ export default function UpgradePage() {
                 return (
                   <article
                     key={plan.id}
-                    className={`flex flex-col justify-between rounded-lg p-6 ${
+                    className={`maithri-glass-card maithri-enter flex flex-col justify-between p-6 ${
                       isCurrent
                         ? "border-2 border-dusk bg-dusk/5"
-                        : "border border-dusk/20 bg-fog"
+                        : plan.id === "plus"
+                          ? "border-2 border-teal/50 bg-fog/85"
+                          : "border border-dusk/20 bg-fog/85"
                     }`}
                   >
                     <div className="space-y-4">
@@ -268,11 +270,15 @@ export default function UpgradePage() {
                           <h2 className="text-lg font-bold text-dusk">
                             {plan.name}
                           </h2>
-                          {isCurrent && formattedExpiry && (
+                          {isCurrent && formattedExpiry ? (
                             <span className="rounded-full border border-teal/50 bg-teal/15 px-2.5 py-0.5 text-[11px] font-semibold text-dusk">
                               {plan.name} until {formattedExpiry}
                             </span>
-                          )}
+                          ) : plan.id === "plus" ? (
+                            <span className="rounded-full bg-teal px-2.5 py-0.5 text-[11px] font-semibold text-fog">
+                              Most popular
+                            </span>
+                          ) : null}
                         </div>
                         <p className="text-sm text-ink/80">
                           {plan.description}
@@ -329,6 +335,10 @@ export default function UpgradePage() {
               })}
             </div>
           )}
+
+          <p className="text-center text-xs text-ink/70">
+            30-day access · No auto-renewal · Cashfree Sandbox test mode
+          </p>
 
           {/* How to test box (Sandbox test credentials) */}
           <aside className="space-y-2 rounded-lg border border-dusk/20 bg-dusk/5 p-5 text-xs leading-relaxed text-ink/85">

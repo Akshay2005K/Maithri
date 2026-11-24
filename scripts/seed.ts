@@ -770,6 +770,10 @@ const MALE_NAMES = [
   "Tanmay Deshmukh", "Shubham Agarwal", "Akash Chatterjee", "Yashwant Rao", "Manish Tiwari",
   "Chirag Bansal", "Anirudh Krishnan", "Kunal Saxena", "Deepak Choudhary", "Saurabh Mishra",
   "Vivek Shetty", "Rajat Khanna", "Mayank Sinha", "Ashwin Hegde", "Nitin Kulkarni",
+  "Raghavendra Bhat", "Samarth Bhatia", "Kartik Subramanian", "Prateek Jain", "Devansh Patel",
+  "Rohith Venkat", "Aayush Srivastava", "Tushar Gokhale", "Shreyas Kamath", "Mihir Parekh",
+  "Naman Oberoi", "Surya Prakash", "Yuvraj Chauhan", "Dhruv Sengupta", "Ishaan Kulkarni",
+  "Vikas Deshpande", "Tejas Murthy", "Arnav Bose", "Harish Natarajan", "Sanket Joshi",
 ];
 
 const FEMALE_NAMES = [
@@ -778,6 +782,10 @@ const FEMALE_NAMES = [
   "Bhavna Gupta", "Charu Malhotra", "Diya Chatterjee", "Esha Verma", "Gauri Bansal",
   "Himani Tiwari", "Jhanvi Kapoor", "Komal Agarwal", "Lavanya Krishnan", "Mansi Saxena",
   "Niharika Sinha", "Ojaswi Hegde", "Pallavi Mishra", "Radhika Shetty", "Swati Khanna",
+  "Ananya Hegde", "Bhavya Murthy", "Chaitra Kulkarni", "Deepika Shenoy", "Ekta Parekh",
+  "Falguni Joshi", "Garima Bhatia", "Harshita Nair", "Ira Deshpande", "Juhi Srivastava",
+  "Kalyani Rao", "Lekha Subramanian", "Madhuri Kamath", "Namrata Jain", "Prachi Gokhale",
+  "Rachna Sengupta", "Sanjana Bose", "Trisha Natarajan", "Urvashi Patel", "Vidya Venkat",
 ];
 
 const CITIES = ["Bengaluru", "Bengaluru", "Bengaluru", "Hyderabad", "Pune", "Chennai", "Mumbai", "NCR"];
@@ -794,7 +802,7 @@ const INTEREST_POOL = [
 function buildExtraUsers(): SeedUser[] {
   const extras: SeedUser[] = [];
 
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < MALE_NAMES.length; i++) {
     const city = CITIES[i % CITIES.length];
     const birthYear = 1998 + (i % 6);
     const goal = GOALS[i % GOALS.length];
@@ -846,7 +854,7 @@ function buildExtraUsers(): SeedUser[] {
     });
   }
 
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < MALE_NAMES.length; i++) {
     const city = CITIES[i % CITIES.length];
     const birthYear = 1998 + (i % 6);
     const goal = GOALS[i % GOALS.length];

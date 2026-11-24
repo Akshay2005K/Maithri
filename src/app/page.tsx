@@ -183,7 +183,7 @@ export default function HomePage() {
 
   return (
     <>
-      <header className="border-b border-dusk/15 bg-fog">
+      <header className="sticky top-0 z-30 border-b border-dusk/15 bg-fog/80 backdrop-blur-md">
         <div className="relative mx-auto w-full max-w-[1100px] px-4 sm:px-6">
           <nav
             aria-label="Primary navigation"
@@ -204,15 +204,20 @@ export default function HomePage() {
             {user ? (
               <div className="flex items-center gap-2">
                 {canNavigateMain && (
-                  <Link
-                    href="/upgrade"
-                    className="hidden min-h-[44px] items-center rounded border border-dusk/25 bg-fog px-3.5 text-sm font-medium text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none sm:inline-flex"
-                  >
-                    {getEffectivePlan(profile?.plan, profile?.plan_expires_at) ===
-                    "pro"
-                      ? "Plans"
-                      : "Upgrade"}
-                  </Link>
+                  <>
+                    <span className="hidden rounded-full border border-dusk/20 bg-dusk/5 px-2.5 py-1 text-xs font-semibold capitalize text-dusk sm:inline-flex">
+                      {getEffectivePlan(profile?.plan, profile?.plan_expires_at)}
+                    </span>
+                    <Link
+                      href="/upgrade"
+                      className="hidden min-h-[44px] items-center rounded-xl border border-dusk/25 bg-fog/80 px-3.5 text-sm font-medium text-dusk transition-colors hover:bg-dusk/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dusk focus-visible:ring-offset-2 motion-reduce:transition-none sm:inline-flex"
+                    >
+                      {getEffectivePlan(profile?.plan, profile?.plan_expires_at) ===
+                      "pro"
+                        ? "Plans"
+                        : "Upgrade"}
+                    </Link>
+                  </>
                 )}
                 <button
                   type="button"

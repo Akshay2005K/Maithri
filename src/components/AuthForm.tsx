@@ -167,15 +167,15 @@ export default function AuthForm() {
   }
 
   return (
-    <section className="grid grid-cols-1 gap-10 py-4 md:grid-cols-12 md:items-start md:py-8">
+    <section className="maithri-enter grid grid-cols-1 gap-10 py-4 md:grid-cols-12 md:items-start md:py-8">
       {/* Left column: Hero headline, one-sentence explanation, static WavePair */}
       <div className="space-y-6 md:col-span-7">
-        <p className="inline-block rounded border border-marigold bg-marigold/20 px-3 py-1 text-xs font-medium text-ink">
+        <p className="inline-block rounded-full border border-marigold/60 bg-marigold/15 px-3.5 py-1 text-xs font-medium text-ink">
           Where Connections Become Meaningful.
         </p>
 
         <h1 className="text-3xl font-bold leading-tight tracking-tight text-dusk sm:text-4xl">
-          Three curated matches a day, never a swipe deck.
+          Curated daily matches, never a swipe deck.
         </h1>
 
         <p className="max-w-xl font-serif text-base leading-relaxed text-ink/90 sm:text-lg">
@@ -184,18 +184,29 @@ export default function AuthForm() {
           feed.
         </p>
 
-        <div className="rounded-lg border border-dusk/15 bg-fog p-5">
+        <div className="maithri-glass-card space-y-4 border border-dusk/15 bg-fog/80 p-5">
           <WavePair
             score={92}
             label="92% compatibility — aligned waves mean shared values"
             size="lg"
           />
+          <div className="grid grid-cols-3 gap-2 border-t border-dusk/10 pt-3 text-center text-xs text-ink/80">
+            <div className="rounded-lg border border-dusk/15 bg-dusk/5 px-2 py-2">
+              1. Blurred start
+            </div>
+            <div className="rounded-lg border border-dusk/15 bg-dusk/5 px-2 py-2">
+              2. Voice unlocks
+            </div>
+            <div className="rounded-lg border border-teal/40 bg-teal/10 px-2 py-2 font-semibold text-dusk">
+              3. Clear + Video
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Right column: Sign in / Sign up / OTP verification + demo credentials */}
       <div className="space-y-5 md:col-span-5">
-        <div className="rounded-lg border border-dusk/20 bg-fog p-6">
+        <div className="maithri-glass-card border border-dusk/20 bg-fog/85 p-6 shadow-sm">
           {otpStep ? (
             <>
               <h2 className="text-xl font-semibold text-dusk">
@@ -376,11 +387,13 @@ export default function AuthForm() {
           )}
         </div>
 
-        {/* Evaluator demo credentials box */}
+        {/* Collapsible Evaluator demo credentials drawer */}
         {!isSignUp && !otpStep && (
-          <div className="rounded-lg border border-dusk/15 bg-dusk/5 p-5 text-sm text-ink">
-            <h3 className="font-semibold text-dusk">Evaluator demo accounts</h3>
-            <p className="mt-1 text-xs text-ink/80">
+          <details className="rounded-[20px] border border-dusk/15 bg-dusk/5 p-4 text-sm text-ink">
+            <summary className="cursor-pointer font-semibold text-dusk focus-visible:outline-none">
+              Evaluator demo accounts
+            </summary>
+            <p className="mt-2 text-xs text-ink/80">
               Shared password: <code>elitmus2026</code>
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -392,7 +405,7 @@ export default function AuthForm() {
                     setEmail(acc.email);
                     setPassword("elitmus2026");
                   }}
-                  className="min-h-[44px] flex-1 rounded border border-dusk/25 bg-fog px-3 py-2 text-xs font-medium text-dusk hover:bg-teal/15"
+                  className="min-h-[44px] flex-1 rounded-xl border border-dusk/25 bg-fog px-3 py-2 text-xs font-medium text-dusk transition-colors hover:bg-teal/15"
                 >
                   Use {acc.label}
                 </button>
@@ -402,7 +415,7 @@ export default function AuthForm() {
               Aarav and Anya share a pre-seeded match; Divya shares Aarav&apos;s
               company (<code>flipkart.com</code>) to test the Privacy Shield.
             </p>
-          </div>
+          </details>
         )}
       </div>
     </section>

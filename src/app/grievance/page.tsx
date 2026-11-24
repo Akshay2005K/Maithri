@@ -4,7 +4,7 @@ import BrandMark from "@/components/BrandMark";
 export default function GrievancePage() {
   return (
     <>
-      <header className="border-b border-dusk/15 bg-fog">
+      <header className="sticky top-0 z-30 border-b border-dusk/15 bg-fog/80 backdrop-blur-md">
         <div className="mx-auto flex min-h-[64px] w-full max-w-[1100px] items-center justify-between gap-4 px-4 sm:px-6">
           <Link
             href="/"

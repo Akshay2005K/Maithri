@@ -667,7 +667,7 @@ export default function Chat({
       {/* Desktop: 2 columns (conversation left, partner panel right). Mobile: partner panel collapsed above messages */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
         {/* Partner Panel (Right on desktop, collapsed above messages on mobile) */}
-        <aside className="order-1 rounded-lg border border-dusk/20 bg-fog p-4 lg:order-2 lg:col-span-5 lg:p-5">
+        <aside className="maithri-enter order-1 rounded-[20px] border border-dusk/20 bg-fog/85 p-4 backdrop-blur-sm lg:order-2 lg:col-span-5 lg:p-5">
           {/* Mobile collapsed summary bar */}
           <div className="flex items-center justify-between gap-3 lg:hidden">
             <div className="flex min-w-0 items-center gap-3">

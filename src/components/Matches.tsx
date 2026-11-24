@@ -546,7 +546,7 @@ function MatchRow({
   const hasMoreChips = detailChips.length > 5;
 
   return (
-    <article className="flex flex-col gap-6 py-6 md:flex-row md:items-start md:justify-between">
+    <article className="maithri-glass-card maithri-enter my-3 flex flex-col gap-6 border border-dusk/15 bg-fog/80 p-5 shadow-sm md:flex-row md:items-start md:justify-between">
       {/* Left: Avatar + Identity + Bio */}
       <div className="flex min-w-0 flex-1 items-start gap-4">
         <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-dusk/25 bg-dusk/10">
