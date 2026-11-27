@@ -9,6 +9,40 @@ import {
 } from "@/lib/livekitServer";
 
 const ALLOWED_ACTIONS = new Set(["accept", "decline", "end"]);
+export const STALE_RINGING_MS = 60_000;
+
+export async function bothCallParticipantsOnline(
+  admin: SupabaseClient,
+  callerId: string,
+  calleeId: string,
+  connectedBefore = new Date().toISOString()
+) {
+  const { data, error } = await admin.from("call_presence")
+    .select("user_id")
+    .in("user_id", [callerId, calleeId])
+    .eq("closed", false)
+    .gt("expires_at", new Date().toISOString())
+    .lte("connected_at", connectedBefore);
+  if (error) throw new Error("Call availability could not be checked.");
+  return new Set(data.map((session) => session.user_id)).size === 2;
+}
+
+export function canRingCall(
+  admin: SupabaseClient,
+  call: { caller_id: string; callee_id: string; created_at: string }
+) {
+  return Date.now() - Date.parse(call.created_at) < STALE_RINGING_MS &&
+    bothCallParticipantsOnline(admin, call.caller_id, call.callee_id, call.created_at);
+}
+
+export async function expireRingingCall(admin: SupabaseClient, callId: string) {
+  const { data, error } = await admin.from("calls")
+    .update({ status: "missed", ended_at: new Date().toISOString() })
+    .eq("id", callId).eq("status", "ringing")
+    .select("room_name").maybeSingle();
+  if (error) throw error;
+  if (data) await deleteLiveKitRoom(data.room_name);
+}
 
 export function generateCallRoomName(): string {
   return `phav-${randomBytes(16).toString("hex")}`;
@@ -171,6 +205,11 @@ export async function handleCallRespondAction(
         callType: callRow.call_type === "video" ? "video" : "audio",
       });
 
+      if (!(await canRingCall(supabaseAdmin, callRow))) {
+        await expireRingingCall(supabaseAdmin, callId);
+        return NextResponse.json({ error: "This call is no longer ringing." }, { status: 409 });
+      }
+
       const { data: updated, error: updateErr } = await supabaseAdmin
         .from("calls")
         .update({
@@ -178,11 +217,15 @@ export async function handleCallRespondAction(
           started_at: new Date().toISOString(),
         })
         .eq("id", callId)
+        .eq("status", "ringing")
         .select("*")
-        .single();
+        .maybeSingle();
 
       if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+      if (!updated) {
+        return NextResponse.json({ error: "This call is no longer ringing." }, { status: 409 });
       }
 
       return NextResponse.json(
@@ -205,11 +248,15 @@ export async function handleCallRespondAction(
           ended_at: new Date().toISOString(),
         })
         .eq("id", callId)
+        .eq("status", "ringing")
         .select("*")
-        .single();
+        .maybeSingle();
 
       if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+      if (!updated) {
+        return NextResponse.json({ error: "This call is no longer ringing." }, { status: 409 });
       }
 
       await deleteLiveKitRoom(callRow.room_name);

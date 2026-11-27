@@ -20,7 +20,7 @@ import {
 import "@livekit/components-styles";
 import { supabase } from "@/lib/supabase";
 
-interface CallRow {
+export interface CallRow {
   id: string;
   match_id: string;
   caller_id: string;
@@ -40,6 +40,8 @@ interface CallPanelProps {
   startRequest?: { callType: "audio" | "video"; seq: number } | null;
   onUpgradeRequired?: (plan: "plus" | "pro") => void;
   onNotUnlockedYet?: (requiredLevel: 2 | 3) => void;
+  incomingCall?: CallRow;
+  onIncomingResponse?: () => void;
 }
 
 function describeMediaFailure(
@@ -221,11 +223,17 @@ export default function CallPanel({
   startRequest,
   onUpgradeRequired,
   onNotUnlockedYet,
+  incomingCall,
+  onIncomingResponse,
 }: CallPanelProps) {
   const [callingEnabled, setCallingEnabled] = useState<boolean | null>(
     process.env.NEXT_PUBLIC_LIVEKIT_URL ? null : false
   );
-  const [activeCall, setActiveCall] = useState<CallRow | null>(null);
+  const [localCall, setActiveCall] = useState<CallRow | null>(null);
+  const isGlobalIncoming = incomingCall !== undefined;
+  const activeCall = isGlobalIncoming && localCall?.status !== "active"
+    ? incomingCall
+    : localCall;
   const [meetingToken, setMeetingToken] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(
     process.env.NEXT_PUBLIC_LIVEKIT_URL ?? null
@@ -233,6 +241,7 @@ export default function CallPanel({
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_LIVEKIT_URL) {
@@ -260,6 +269,7 @@ export default function CallPanel({
       .from("calls")
       .select("*")
       .eq("match_id", matchId)
+      .eq("caller_id", currentUserId)
       .in("status", ["ringing", "active"])
       .order("created_at", { ascending: false })
       .limit(1)
@@ -269,7 +279,7 @@ export default function CallPanel({
   }
 
   useEffect(() => {
-    if (!callingEnabled) return;
+    if (!callingEnabled || isGlobalIncoming) return;
     loadLatestCall();
 
     const channel = supabase
@@ -284,6 +294,7 @@ export default function CallPanel({
         },
         (payload) => {
           const row = payload.new as CallRow;
+          if (row.caller_id !== currentUserId) return;
           if (row.status === "ringing" || row.status === "active") {
             setStatusNotice(null);
             setActiveCall(row);
@@ -311,13 +322,13 @@ export default function CallPanel({
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, callingEnabled, partnerFirstName]);
+  }, [matchId, callingEnabled, partnerFirstName, currentUserId, isGlobalIncoming]);
 
   useEffect(() => {
     if (!startRequest || !callingEnabled) return;
     handleStartCall(startRequest.callType);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startRequest?.seq]);
+  }, [startRequest?.seq, callingEnabled]);
 
   async function handleStartCall(callType: "audio" | "video") {
     setError(null);
@@ -398,6 +409,7 @@ export default function CallPanel({
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 409) onIncomingResponse?.();
         throw new Error(body.error || "Could not update call.");
       }
 
@@ -410,7 +422,9 @@ export default function CallPanel({
       } else {
         setActiveCall(null);
         setMeetingToken(null);
+        if (isGlobalIncoming) setDismissed(true);
       }
+      onIncomingResponse?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update call.");
     } finally {
@@ -418,7 +432,10 @@ export default function CallPanel({
     }
   }
 
-  if (isClosed || callingEnabled !== true) return null;
+  if (isClosed || dismissed || (!isGlobalIncoming && callingEnabled !== true)) return null;
+  if (isGlobalIncoming && activeCall?.status === "active" && !meetingToken && !busy) {
+    return null;
+  }
 
   const isCaller = activeCall?.caller_id === currentUserId;
   const isIncoming = activeCall?.status === "ringing" && !isCaller;
@@ -426,7 +443,13 @@ export default function CallPanel({
   if (!activeCall && !statusNotice && !error) return null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-dusk/20 bg-dusk/5 p-4">
+    <div
+      role={isGlobalIncoming ? "region" : undefined}
+      aria-label={isGlobalIncoming ? "Maithri call" : undefined}
+      className={isGlobalIncoming
+        ? "fixed inset-x-4 top-4 z-[100] mx-auto max-h-[90dvh] w-auto max-w-md space-y-3 overflow-auto rounded-lg border border-dusk/20 bg-fog p-4 shadow-xl"
+        : "space-y-3 rounded-lg border border-dusk/20 bg-dusk/5 p-4"}
+    >
       <div>
         <h3 className="text-sm font-semibold text-dusk">
           Voice and video call
@@ -438,7 +461,7 @@ export default function CallPanel({
 
       {!activeCall ? null : isIncoming ? (
         <div className="space-y-2.5 rounded border border-teal bg-teal/15 p-3 text-xs">
-          <p className="font-semibold text-dusk">
+          <p role={isGlobalIncoming ? "alert" : undefined} className="font-semibold text-dusk">
             Incoming {activeCall.call_type === "audio" ? "voice" : "video"} call
             from {partnerFirstName}
           </p>

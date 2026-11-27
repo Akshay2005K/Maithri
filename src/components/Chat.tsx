@@ -30,6 +30,26 @@ interface MessageRow {
   created_at: string;
 }
 
+interface CallHistoryRow {
+  id: string;
+  caller_id: string;
+  call_type: "audio" | "video";
+  status: "missed" | "declined" | "ended";
+  created_at: string;
+  started_at: string | null;
+}
+
+function getCallHistoryLabel(call: CallHistoryRow, userId: string) {
+  const type = call.call_type === "audio" ? "voice call" : "video call";
+  const outgoing = call.caller_id === userId;
+  if (call.status === "missed") {
+    return outgoing ? `Unanswered ${type}` : `Missed ${type}`;
+  }
+  if (call.status === "declined") return `Declined ${type}`;
+  if (!call.started_at) return `Cancelled ${type}`;
+  return outgoing ? `Outgoing ${type} ended` : `Incoming ${type} ended`;
+}
+
 interface DatePlanRow {
   id: string;
   match_id: string;
@@ -151,6 +171,10 @@ export default function Chat({
   onBlocked,
 }: ChatProps) {
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [callHistory, setCallHistory] = useState<{
+    matchId: string;
+    rows: CallHistoryRow[];
+  } | null>(null);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -249,7 +273,30 @@ export default function Chat({
   }
 
   useEffect(() => {
-    fetchMessages();
+    let disposed = false;
+    let historyRequest = 0;
+
+    async function fetchCallHistory() {
+      const request = ++historyRequest;
+      const { data, error: historyError } = await supabase
+        .from("calls")
+        .select("id, caller_id, call_type, status, created_at, started_at")
+        .eq("match_id", matchId)
+        .in("status", ["missed", "declined", "ended"])
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(100);
+      if (!disposed && request === historyRequest && !historyError) {
+        setCallHistory({ matchId, rows: data as CallHistoryRow[] });
+      }
+    }
+
+    function refreshConversation() {
+      void fetchMessages();
+      void fetchCallHistory();
+    }
+
+    refreshConversation();
 
     // Live Supabase Realtime subscription for instant new messages & read receipts
     const channel = supabase
@@ -315,17 +362,40 @@ export default function Chat({
           }
         }
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "calls",
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => {
+          if (["missed", "declined", "ended"].includes(payload.new.status)) {
+            void fetchCallHistory();
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void fetchCallHistory();
+      });
 
     // Fallback poll every 15s in case Realtime replication is not enabled
-    const interval = setInterval(fetchMessages, 15000);
+    const interval = setInterval(refreshConversation, 15000);
     return () => {
+      disposed = true;
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId]);
 
+  const timeline = [
+    ...messages.map((message) => ({ kind: "message" as const, row: message })),
+    ...(callHistory?.matchId === matchId ? callHistory.rows : [])
+      .map((call) => ({ kind: "call" as const, row: call })),
+  ].sort((a, b) => Date.parse(a.row.created_at) - Date.parse(b.row.created_at));
+  const lastOwnMessage = messages.filter((message) => message.sender_id === currentUser.id).pop();
   const unblur = getUnblurStatus(messages);
   const wordCount = countWords(draft);
   const partnerPrompts = Array.isArray(partner.prompts) ? partner.prompts : [];
@@ -1071,20 +1141,34 @@ export default function Chat({
             <p className="py-10 text-left text-sm text-ink/75">
               Loading conversation...
             </p>
-          ) : messages.length === 0 ? (
+          ) : timeline.length === 0 ? (
             <p className="py-10 text-left font-serif text-sm text-ink/80">
               No messages yet. Write a thoughtful opener of at least four words
               below to start unblurring photos.
             </p>
           ) : (
             <div className="my-4 max-h-96 space-y-3 overflow-y-auto pr-1">
-              {messages.map((msg, idx) => {
+              {timeline.map(({ kind, row: msg }) => {
+                if (kind === "call") {
+                  return (
+                    <p
+                      key={`call-${msg.id}`}
+                      className="mx-auto w-fit rounded-full border border-dusk/15 bg-dusk/5 px-3 py-1.5 text-center text-xs text-ink/80"
+                    >
+                      {getCallHistoryLabel(msg, currentUser.id)} ·{" "}
+                      <time dateTime={msg.created_at}>
+                        {new Date(msg.created_at).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </time>
+                    </p>
+                  );
+                }
                 const isMine = msg.sender_id === currentUser.id;
-                const isLastMine =
-                  isMine &&
-                  !messages
-                    .slice(idx + 1)
-                    .some((later) => later.sender_id === currentUser.id);
+                const isLastMine = msg.id === lastOwnMessage?.id;
                 const promptAnswer = msg.reply_to_prompt_key
                   ? findPromptAnswer(msg.reply_to_prompt_key, msg.sender_id)
                   : null;

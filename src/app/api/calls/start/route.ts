@@ -5,16 +5,18 @@ import { canStartCall, getRequiredPlanForCall } from "@/lib/entitlements";
 import {
   createLiveKitRoom,
   createLiveKitToken,
+  deleteLiveKitRoom,
   getLiveKitServerUrl,
   LiveKitUnavailableError,
 } from "@/lib/livekitServer";
 import {
+  bothCallParticipantsOnline,
   extractFirstName,
   generateCallRoomName,
+  STALE_RINGING_MS,
 } from "@/lib/callsServer";
 
 const MAX_CALL_STARTS_PER_HOUR = 10;
-const STALE_RINGING_MS = 60_000;
 
 export async function POST(request: Request) {
   try {
@@ -203,6 +205,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const presenceCutoff = new Date().toISOString();
+    const offlineResponse = () => NextResponse.json(
+      { error: "Both people need to be online in Maithri to start a call." },
+      { status: 409 }
+    );
+    if (!(await bothCallParticipantsOnline(supabaseAdmin, user.id, partnerId, presenceCutoff))) {
+      return offlineResponse();
+    }
+
     const roomName = generateCallRoomName();
     const serverUrl = getLiveKitServerUrl();
 
@@ -213,6 +224,11 @@ export async function POST(request: Request) {
       firstName: extractFirstName(profileRow?.full_name),
       callType,
     });
+
+    if (!(await bothCallParticipantsOnline(supabaseAdmin, user.id, partnerId, presenceCutoff))) {
+      await deleteLiveKitRoom(roomName);
+      return offlineResponse();
+    }
 
     const { data: callRow, error: insertErr } = await supabaseAdmin
       .from("calls")
@@ -229,6 +245,7 @@ export async function POST(request: Request) {
       .single();
 
     if (insertErr || !callRow) {
+      await deleteLiveKitRoom(roomName);
       return NextResponse.json(
         { error: insertErr?.message || "Failed to save call." },
         { status: 500 }

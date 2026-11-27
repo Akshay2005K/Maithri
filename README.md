@@ -181,7 +181,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, `supabase/migrations_payments.sql`, `supabase/migrations_review_fixes.sql`, and `supabase/migrations_daily_picks.sql` in **SQL Editor**, in that order.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, `supabase/migrations_payments.sql`, `supabase/migrations_review_fixes.sql`, `supabase/migrations_daily_picks.sql`, and `supabase/migrations_call_presence.sql` in **SQL Editor**, in that order.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:

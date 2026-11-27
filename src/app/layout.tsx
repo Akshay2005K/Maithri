@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Bricolage_Grotesque, Literata } from "next/font/google";
+import IncomingCalls from "@/components/IncomingCalls";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -37,6 +38,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="flex min-h-screen flex-col bg-fog font-sans text-ink antialiased">
+        {process.env.NEXT_PUBLIC_LIVEKIT_URL && <IncomingCalls />}
         <div className="flex-1">{children}</div>
 
         <footer className="border-t border-dusk/15 bg-fog">
