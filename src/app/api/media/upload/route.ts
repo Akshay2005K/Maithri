@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
-const BUCKET = "profile-media";
+import { flushProfileMediaCleanup, PROFILE_MEDIA_BUCKET as BUCKET } from "@/lib/profileMediaServer";
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 async function verifyUser(request: Request) {
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const prefix = `${user.id}/photo-${Date.now()}`;
+      const prefix = `${user.id}/photo-${randomUUID()}`;
       const paths = {
         full: `${prefix}-full.webp`,
         blur2: `${prefix}-blur2.webp`,
@@ -80,24 +81,22 @@ export async function POST(request: Request) {
           .from(BUCKET)
           .upload(paths.full, Buffer.from(await fullFile.arrayBuffer()), {
             contentType: fullFile.type || "image/webp",
-            upsert: true,
           }),
         supabaseAdmin.storage
           .from(BUCKET)
           .upload(paths.blur2, Buffer.from(await blur2File.arrayBuffer()), {
             contentType: blur2File.type || "image/webp",
-            upsert: true,
           }),
         supabaseAdmin.storage
           .from(BUCKET)
           .upload(paths.blur1, Buffer.from(await blur1File.arrayBuffer()), {
             contentType: blur1File.type || "image/webp",
-            upsert: true,
           }),
       ]);
 
       const firstErr = uploads.find((u) => u.error)?.error;
       if (firstErr) {
+        await supabaseAdmin.storage.from(BUCKET).remove(Object.values(paths));
         return NextResponse.json({ error: firstErr.message }, { status: 500 });
       }
 
@@ -112,6 +111,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: dbErr.message }, { status: 500 });
       }
 
+      await flushProfileMediaCleanup(supabaseAdmin, user.id).catch(console.error);
       return NextResponse.json({ profile: updated });
     }
 
@@ -130,12 +130,11 @@ export async function POST(request: Request) {
         );
       }
 
-      const voicePath = `${user.id}/voice-${Date.now()}.webm`;
+      const voicePath = `${user.id}/voice-${randomUUID()}.webm`;
       const { error: uploadErr } = await supabaseAdmin.storage
         .from(BUCKET)
         .upload(voicePath, Buffer.from(await audioFile.arrayBuffer()), {
           contentType: audioFile.type || "audio/webm",
-          upsert: true,
         });
 
       if (uploadErr) {
@@ -153,6 +152,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: dbErr.message }, { status: 500 });
       }
 
+      await flushProfileMediaCleanup(supabaseAdmin, user.id).catch(console.error);
       return NextResponse.json({ profile: updated });
     }
 
@@ -188,6 +188,7 @@ export async function DELETE(request: Request) {
       if (dbErr) {
         return NextResponse.json({ error: dbErr.message }, { status: 500 });
       }
+      await flushProfileMediaCleanup(supabaseAdmin, user.id);
       return NextResponse.json({ profile: updated });
     }
 
@@ -201,6 +202,7 @@ export async function DELETE(request: Request) {
       if (dbErr) {
         return NextResponse.json({ error: dbErr.message }, { status: 500 });
       }
+      await flushProfileMediaCleanup(supabaseAdmin, user.id);
       return NextResponse.json({ profile: updated });
     }
 

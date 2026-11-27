@@ -325,7 +325,7 @@ export default function Matches({
         </h1>
         <p className="mt-1 text-sm text-ink/80">
           Generated on open from your compatibility quiz and city (
-          {profile.city}).
+          {profile.city}). New daily picks become available at midnight IST.
         </p>
       </div>
 

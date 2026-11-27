@@ -5,7 +5,22 @@ import {
   doesInterestedInIncludeGender,
   computeCompatibilityScore,
   computeCompatibilityBreakdown,
+  getMatchDate,
 } from "../src/lib/matching";
+import { isOwnedMediaPath } from "../src/lib/profileMediaServer";
+
+it("changes the match date at midnight in India", () => {
+  assert.equal(getMatchDate(new Date("2026-11-27T18:29:59Z")), "2026-11-27");
+  assert.equal(getMatchDate(new Date("2026-11-27T18:30:00Z")), "2026-11-28");
+});
+
+it("accepts legacy and new media filenames only under the intended owner's folder", () => {
+  const owner = "example-owner";
+  assert.equal(isOwnedMediaPath(`${owner}/photo-1795800000000-blur1.webp`, owner), true);
+  assert.equal(isOwnedMediaPath(`${owner}/voice-8defeb67-d50c-4539-aef5-de670c948c45.webm`, owner), true);
+  assert.equal(isOwnedMediaPath("other-owner/photo-1795800000000-full.webp", owner), false);
+  assert.equal(isOwnedMediaPath(`${owner}/../photo-1795800000000-full.webp`, owner), false);
+});
 
 function makeProfile(overrides: Record<string, unknown> = {}) {
   return {

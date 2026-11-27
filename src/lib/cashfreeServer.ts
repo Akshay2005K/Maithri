@@ -157,7 +157,6 @@ export type VerifyOrderResult =
       error: string;
     };
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function verifyAndApplyCashfreeOrder(
   supabaseAdmin: SupabaseClient,
@@ -210,69 +209,19 @@ export async function verifyAndApplyCashfreeOrder(
       };
     }
 
-    const nowMs = Date.now();
-    const nowIso = new Date(nowMs).toISOString();
+    const { data: applied, error: applyErr } = await supabaseAdmin
+      .rpc("apply_cashfree_payment", { payment_id: paymentRow.id })
+      .single<{ payment_status: "paid" | "failed" | "expired"; expires_at: string | null }>();
 
-    // Atomic conditional update: only one caller can transition 'created' -> 'paid'
-    const { data: claimed, error: claimErr } = await supabaseAdmin
-      .from("payments")
-      .update({ status: "paid", paid_at: nowIso })
-      .eq("id", paymentRow.id)
-      .eq("status", "created")
-      .select("id, user_id, plan")
-      .maybeSingle();
-
-    if (claimErr) {
-      return {
-        ok: false,
-        httpStatus: 500,
-        error: "Could not record payment confirmation.",
-      };
-    }
-
-    if (!claimed) {
-      // Already claimed by a concurrent verify/webhook call; never extend twice
-      return { ok: true, status: "paid", plan: purchasedPlan };
-    }
-
-    const { data: profileRow } = await supabaseAdmin
-      .from("profiles")
-      .select("plan, plan_expires_at")
-      .eq("id", claimed.user_id)
-      .maybeSingle();
-
-    const currentExpiryMs = profileRow?.plan_expires_at
-      ? Date.parse(profileRow.plan_expires_at)
-      : NaN;
-    const isRenewingSamePlan =
-      profileRow?.plan === purchasedPlan &&
-      !Number.isNaN(currentExpiryMs) &&
-      currentExpiryMs > nowMs;
-
-    const baseMs = isRenewingSamePlan ? currentExpiryMs : nowMs;
-    const nextExpiresAt = new Date(baseMs + THIRTY_DAYS_MS).toISOString();
-
-    const { error: profileUpdateErr } = await supabaseAdmin
-      .from("profiles")
-      .update({
-        plan: purchasedPlan,
-        plan_expires_at: nextExpiresAt,
-      })
-      .eq("id", claimed.user_id);
-
-    if (profileUpdateErr) {
-      return {
-        ok: false,
-        httpStatus: 500,
-        error: "Payment recorded, but failed to activate plan.",
-      };
+    if (applyErr || !applied) {
+      return { ok: false, httpStatus: 500, error: "Could not activate the confirmed plan." };
     }
 
     return {
       ok: true,
-      status: "paid",
+      status: applied.payment_status,
       plan: purchasedPlan,
-      planExpiresAt: nextExpiresAt,
+      ...(applied.expires_at ? { planExpiresAt: applied.expires_at } : {}),
     };
   }
 

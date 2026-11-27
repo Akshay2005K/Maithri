@@ -8,6 +8,18 @@ import {
 import { getDisplayedAge } from "./profileOptions";
 import { getUnblurStatus } from "./unblur";
 import { getEntitlements } from "./entitlements";
+import { isOwnedMediaPath, PROFILE_MEDIA_BUCKET } from "./profileMediaServer";
+
+const matchDateFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function getMatchDate(date = new Date()): string {
+  return matchDateFormatter.format(date);
+}
 
 export interface CompatibilityFactor {
   key: "q1" | "q2" | "q3" | "q4" | "q5";
@@ -183,7 +195,7 @@ export async function getOrCreateTodaysMatchesForUser(
   hiddenByShieldCount: number;
   hasMoreCandidates: boolean;
 }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getMatchDate();
 
   const [{ data: existingMatches }, { data: blocks }, { data: allProfiles }] =
     await Promise.all([
@@ -409,9 +421,9 @@ export async function getOrCreateTodaysMatchesForUser(
                 ? partner.photo_paths.blur2
                 : partner.photo_paths.blur1;
 
-          if (levelPath) {
+          if (isOwnedMediaPath(levelPath, partnerId)) {
             const { data: signed } = await adminClient.storage
-              .from("profile-media")
+              .from(PROFILE_MEDIA_BUCKET)
               .createSignedUrl(levelPath, 3600);
             if (signed?.signedUrl) {
               safePartner.avatar_url = signed.signedUrl;
@@ -420,9 +432,9 @@ export async function getOrCreateTodaysMatchesForUser(
           }
         }
 
-        if (partner.voice_intro_path) {
+        if (isOwnedMediaPath(partner.voice_intro_path, partnerId)) {
           const { data: signedVoice } = await adminClient.storage
-            .from("profile-media")
+            .from(PROFILE_MEDIA_BUCKET)
             .createSignedUrl(partner.voice_intro_path, 3600);
           if (signedVoice?.signedUrl) {
             safePartner.voice_intro_url = signedVoice.signedUrl;

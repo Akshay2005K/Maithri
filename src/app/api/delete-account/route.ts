@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { removeAllProfileMedia } from "@/lib/profileMediaServer";
 
 // Server-only API route to permanently delete the authenticated user.
 // Uses SUPABASE_SERVICE_ROLE_KEY because deleting a row from auth.users
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
+    await removeAllProfileMedia(supabaseAdmin, user.id);
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
       user.id
     );
