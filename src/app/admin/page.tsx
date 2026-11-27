@@ -62,6 +62,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const sendsNotice = action === "warn" || action === "suspend" || action === "restore";
 
   useEffect(() => {
@@ -127,7 +128,29 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6">
-      <Link href="/" className="text-sm underline">Back to Maithri</Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/" className="text-sm underline">Back to Maithri</Link>
+        {viewer && (
+          <button
+            type="button"
+            className={button}
+            disabled={saving || signingOut}
+            onClick={async () => {
+              setSigningOut(true);
+              try {
+                const { error } = await supabase.auth.signOut({ scope: "local" });
+                if (error) throw error;
+              } catch {
+                setError("Could not sign out. Please try again.");
+              } finally {
+                setSigningOut(false);
+              }
+            }}
+          >
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
+        )}
+      </div>
       <h1 className="text-3xl font-semibold text-dusk">Moderation</h1>
       {error && <p role="alert" className="rounded-lg bg-marigold/20 p-4">{error}</p>}
       {feedback && <p role="status" className="rounded-lg bg-teal/15 p-4">{feedback}</p>}

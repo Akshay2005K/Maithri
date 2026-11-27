@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import {
   supabase,
@@ -32,6 +33,7 @@ function isQuizComplete(profile: Profile | null): boolean {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,26 +57,41 @@ export default function HomePage() {
       }
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const candidateUser = session?.user ?? null;
-      const confirmedUser = candidateUser?.email_confirmed_at
-        ? candidateUser
-        : null;
-      setUser(confirmedUser);
-      if (confirmedUser) loadProfile(confirmedUser.id);
-      else setLoading(false);
-    });
+    let previousUserId: string | null | undefined;
+    let authVersion = 0;
+
+    async function loadSignedInUser(userId: string, token: string, checkFounder: boolean, version: number) {
+      if (checkFounder) {
+        const access = await fetch("/api/moderation?access=1", {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(5000),
+        }).catch(() => null);
+        if (version !== authVersion) return;
+        if (access?.ok) {
+          router.replace("/admin");
+          return;
+        }
+      }
+      if (version === authVersion) await loadProfile(userId, () => version === authVersion);
+    }
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const candidateUser = session?.user ?? null;
       const confirmedUser = candidateUser?.email_confirmed_at
         ? candidateUser
         : null;
+      const userId = confirmedUser?.id ?? null;
+      if (previousUserId === userId) return;
+      const checkFounder = event === "SIGNED_IN";
+      previousUserId = userId;
+      const version = ++authVersion;
       setUser(confirmedUser);
-      if (confirmedUser) loadProfile(confirmedUser.id);
-      else {
+      if (confirmedUser && session) {
+        setLoading(true);
+        void loadSignedInUser(confirmedUser.id, session.access_token, checkFounder, version);
+      } else {
         setProfile(null);
         setShowProfileView(false);
         setActiveChat(null);
@@ -85,10 +102,13 @@ export default function HomePage() {
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      authVersion++;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
-  async function loadProfile(userId: string) {
+  async function loadProfile(userId: string, isCurrent = () => true) {
     setLoading(true);
     const { data } = await supabase
       .from("profiles")
@@ -96,6 +116,7 @@ export default function HomePage() {
       .eq("id", userId)
       .maybeSingle();
 
+    if (!isCurrent()) return;
     setProfile((data as Profile) ?? null);
     setLoading(false);
   }

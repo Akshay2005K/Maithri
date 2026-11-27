@@ -24,6 +24,7 @@ export async function GET(request: Request) {
     const access = await authenticate(request);
     if (!access) return reply({ error: "Founder access is required." }, 403);
     const { searchParams } = new URL(request.url);
+    if (searchParams.get("access") === "1") return reply({ allowed: true });
     const id = searchParams.get("id");
     if (!id) {
       const status = searchParams.get("status") ?? "open";
