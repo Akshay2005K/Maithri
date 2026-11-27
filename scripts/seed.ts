@@ -774,6 +774,7 @@ const MALE_NAMES = [
   "Rohith Venkat", "Aayush Srivastava", "Tushar Gokhale", "Shreyas Kamath", "Mihir Parekh",
   "Naman Oberoi", "Surya Prakash", "Yuvraj Chauhan", "Dhruv Sengupta", "Ishaan Kulkarni",
   "Vikas Deshpande", "Tejas Murthy", "Arnav Bose", "Harish Natarajan", "Sanket Joshi",
+  "Rohan Banerjee", "Neel Madhavan", "Jai Srinivasan", "Omkar Prabhu", "Rahul Lakshman",
 ];
 
 const FEMALE_NAMES = [
@@ -786,6 +787,7 @@ const FEMALE_NAMES = [
   "Falguni Joshi", "Garima Bhatia", "Harshita Nair", "Ira Deshpande", "Juhi Srivastava",
   "Kalyani Rao", "Lekha Subramanian", "Madhuri Kamath", "Namrata Jain", "Prachi Gokhale",
   "Rachna Sengupta", "Sanjana Bose", "Trisha Natarajan", "Urvashi Patel", "Vidya Venkat",
+  "Aparna Pillai", "Keerthi Prabhu", "Janaki Ramesh", "Rupa Venkatesh", "Shreya Acharya",
 ];
 
 const CITIES = ["Bengaluru", "Bengaluru", "Bengaluru", "Hyderabad", "Pune", "Chennai", "Mumbai", "NCR"];
@@ -803,9 +805,9 @@ function buildExtraUsers(): SeedUser[] {
   const extras: SeedUser[] = [];
 
   for (let i = 0; i < MALE_NAMES.length; i++) {
-    const city = CITIES[i % CITIES.length];
+    const city = i % 4 === 0 ? CITIES[(i / 4) % CITIES.length] : "Bengaluru";
     const birthYear = 1998 + (i % 6);
-    const goal = GOALS[i % GOALS.length];
+    const goal = i % 5 < 3 ? "long_term" : GOALS[i % GOALS.length];
     extras.push({
       email: `demo-m${i + 1}@elitmus-demo.in`,
       full_name: MALE_NAMES[i],
@@ -854,10 +856,10 @@ function buildExtraUsers(): SeedUser[] {
     });
   }
 
-  for (let i = 0; i < MALE_NAMES.length; i++) {
-    const city = CITIES[i % CITIES.length];
+  for (let i = 0; i < FEMALE_NAMES.length; i++) {
+    const city = i % 4 === 0 ? CITIES[(i / 4) % CITIES.length] : "Bengaluru";
     const birthYear = 1998 + (i % 6);
-    const goal = GOALS[i % GOALS.length];
+    const goal = i % 5 < 3 ? "long_term" : GOALS[i % GOALS.length];
     extras.push({
       email: `demo-f${i + 1}@elitmus-demo.in`,
       full_name: FEMALE_NAMES[i],
@@ -909,23 +911,24 @@ function buildExtraUsers(): SeedUser[] {
   return extras;
 }
 
-const ALL_SEED_USERS: SeedUser[] = [...SEED_USERS, ...buildExtraUsers()];
-
 async function runSeed() {
   const supabaseAdmin = createAdminClient();
   const now = new Date().toISOString();
   const idByEmail: Record<string, string> = {};
+  const poolOnly = process.argv.includes("--pool-only");
+  const seedUsers = poolOnly ? buildExtraUsers() : [...SEED_USERS, ...buildExtraUsers()];
+  const existingByEmail = new Map<string, string>();
 
-  // Fetch existing auth users so the script can be re-run safely
-  const { data: existingList, error: listError } =
-    await supabaseAdmin.auth.admin.listUsers({ perPage: 200 });
-  if (listError) throw listError;
+  for (let page = 1; ; page++) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+    if (error) throw error;
+    for (const user of data.users) {
+      if (user.email) existingByEmail.set(user.email.toLowerCase(), user.id);
+    }
+    if (data.users.length < 100) break;
+  }
 
-  const existingByEmail = new Map(
-    existingList.users.map((u) => [u.email?.toLowerCase() ?? "", u.id])
-  );
-
-  for (const user of ALL_SEED_USERS) {
+  for (const user of seedUsers) {
     let userId = existingByEmail.get(user.email.toLowerCase());
 
     if (!userId) {
@@ -938,10 +941,11 @@ async function runSeed() {
       if (createErr) throw createErr;
       userId = created.user.id;
       console.log(`Created auth user: ${user.email}`);
-    } else {
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
+    } else if (!poolOnly) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         email_confirm: true,
       });
+      if (error) throw error;
       console.log(`Auth user already exists (email confirmed): ${user.email}`);
     }
 
@@ -973,11 +977,15 @@ async function runSeed() {
       q5: user.q5,
       dpdp_consent_at: now,
       house_rules_accepted_at: now,
-      plan: user.plan ?? "free",
-      plan_expires_at: null,
+      ...(!poolOnly ? { plan: user.plan ?? "free", plan_expires_at: null } : {}),
     });
 
     if (profileErr) throw profileErr;
+  }
+
+  if (poolOnly) {
+    console.log(`Seeded ${MALE_NAMES.length} male and ${FEMALE_NAMES.length} female demo profiles.`);
+    return;
   }
 
   // Seed one shared match between the two evaluator accounts (Aarav & Anya)
@@ -1121,7 +1129,7 @@ async function runSeed() {
     console.log("Revoked any previously unmatched profiles.");
   }
 
-  console.log(`Seed complete! (${ALL_SEED_USERS.length} users processed)`);
+  console.log(`Seed complete! (${seedUsers.length} users processed)`);
 }
 
 runSeed().catch((err) => {

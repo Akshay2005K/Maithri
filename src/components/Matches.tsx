@@ -43,9 +43,8 @@ export default function Matches({
   const [lastMessageByMatch, setLastMessageByMatch] = useState<
     Record<string, LastMessagePreview>
   >({});
-  const [filterMode, setFilterMode] = useState<"all" | "like" | "save">("all");
+  const [filterMode, setFilterMode] = useState<"all" | "inbox" | "like" | "save">("all");
   const [hiddenCount, setHiddenCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -150,7 +149,6 @@ export default function Matches({
         setUnblurByMatch(statusMap);
         setLastMessageByMatch(lastMsgMap);
         setHiddenCount(result.hiddenByShieldCount);
-        setHasMore(result.hasMoreCandidates);
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "Failed to load matches.");
@@ -307,26 +305,40 @@ export default function Matches({
   const likedCount = allMatchesCombined.filter((m) => m.myAction === "like").length;
   const savedCount = allMatchesCombined.filter((m) => m.myAction === "save").length;
 
-  const applyFilter = (list: MatchWithProfile[]) =>
-    filterMode === "all"
-      ? list
-      : list.filter((m) => m.myAction === filterMode);
+  const inbox = allMatchesCombined.filter((match) => match.hasMessages || match.closedAt);
+  const visibleMatches = filterMode === "all"
+    ? todaysMatches.filter((match) => !match.myAction && !match.hasMessages && !match.closedAt)
+    : filterMode === "inbox"
+      ? inbox
+      : allMatchesCombined.filter((match) => match.myAction === filterMode);
 
-  const visibleTodays = applyFilter(todaysMatches);
-  const visibleEarlier = applyFilter(earlierMatches);
+  const heading = {
+    all: "Today's curated picks",
+    inbox: "Inbox",
+    like: "Liked profiles",
+    save: "Saved profiles",
+  }[filterMode];
+
+  const emptyMessage = {
+    all: "You're caught up. Check back after midnight IST for your next picks.",
+    inbox: "Your conversations will appear here.",
+    like: "Profiles you like will appear here.",
+    save: "Profiles you save will appear here.",
+  }[filterMode];
 
   return (
     <section className="space-y-6">
       {/* Page Header */}
       <div className="border-b border-dusk/15 pb-5">
         <h1 className="text-2xl font-bold text-dusk">
-          Today&apos;s curated matches ({todaysMatches.length}/
-          {getEntitlements(profile.plan, profile.plan_expires_at).dailyMatches})
+          {heading}
         </h1>
-        <p className="mt-1 text-sm text-ink/80">
-          Generated on open from your compatibility quiz and city (
-          {profile.city}). New daily picks become available at midnight IST.
-        </p>
+        {filterMode === "all" && (
+          <p className="mt-1 text-sm text-ink/80">
+            {visibleMatches.length} {visibleMatches.length === 1 ? "pick" : "picks"} to review.
+            Daily picks refresh at midnight IST.
+          </p>
+        )}
       </div>
 
       {/* Privacy Shield Status */}
@@ -362,39 +374,38 @@ export default function Matches({
         </div>
       )}
 
-      {/* Filter pills: All / Liked / Saved */}
-      {allMatchesCombined.length > 0 && (
-        <div
-          role="group"
-          aria-label="Filter matches"
-          className="flex flex-wrap gap-2"
-        >
-          {(
-            [
-              { key: "all", label: `All (${allMatchesCombined.length})` },
-              { key: "like", label: `Liked (${likedCount})` },
-              { key: "save", label: `Saved (${savedCount})` },
-            ] as const
-          ).map((tab) => {
-            const active = filterMode === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setFilterMode(tab.key)}
-                className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-medium transition-colors ${
-                  active
-                    ? "border-teal bg-dusk text-fog"
-                    : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Match views */}
+      <div
+        role="group"
+        aria-label="Filter matches"
+        className="flex flex-wrap gap-2"
+      >
+        {(
+          [
+            { key: "all", label: "Today" },
+            { key: "inbox", label: `Inbox (${inbox.length})` },
+            { key: "like", label: `Liked (${likedCount})` },
+            { key: "save", label: `Saved (${savedCount})` },
+          ] as const
+        ).map((tab) => {
+          const active = filterMode === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setFilterMode(tab.key)}
+              className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-medium transition-colors ${
+                active
+                  ? "border-teal bg-dusk text-fog"
+                  : "border-dusk/25 bg-fog text-ink hover:bg-dusk/5"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
       {error && (
         <p
@@ -414,33 +425,22 @@ export default function Matches({
         </p>
       )}
 
-      {/* Full-width vertical list of matches */}
-      {visibleTodays.length === 0 ? (
+      {visibleMatches.length === 0 ? (
         <div className="rounded-lg border border-dusk/20 bg-dusk/5 p-6 text-left">
-          <p className="text-sm text-ink">
-            {filterMode !== "all"
-              ? `No ${filterMode === "like" ? "liked" : "saved"} matches in today's list.`
-              : `No eligible matches found right now in ${profile.city} or nearby cities.`}
-          </p>
+          <p className="text-sm text-ink">{emptyMessage}</p>
           {filterMode === "all" && (
-            <>
-              <p className="mt-1 text-sm text-ink/80">
-                Update your looking-for preferences, city, or Privacy Shield
-                settings to expand today&apos;s pool.
-              </p>
-              <button
-                type="button"
-                onClick={onEditProfile}
-                className="mt-4 inline-flex min-h-[44px] items-center rounded bg-dusk px-4 text-sm font-medium text-fog hover:bg-dusk/90"
-              >
-                Update profile preferences
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={onEditProfile}
+              className="mt-4 inline-flex min-h-[44px] items-center rounded bg-dusk px-4 text-sm font-medium text-fog hover:bg-dusk/90"
+            >
+              Update profile preferences
+            </button>
           )}
         </div>
       ) : (
         <div className="divide-y divide-dusk/15 border-y border-dusk/15">
-          {visibleTodays.map((item) => (
+          {visibleMatches.map((item) => (
             <MatchRow
               key={item.matchId}
               item={item}
@@ -453,27 +453,6 @@ export default function Matches({
         </div>
       )}
 
-      {/* Earlier Active Matches */}
-      {visibleEarlier.length > 0 && (
-        <div className="space-y-3 pt-4">
-          <h2 className="text-lg font-semibold text-dusk">
-            Previous active matches
-          </h2>
-          <div className="divide-y divide-dusk/15 border-y border-dusk/15">
-            {visibleEarlier.map((item) => (
-              <MatchRow
-                key={item.matchId}
-                item={item}
-                unblur={unblurByMatch[item.matchId]}
-                lastMessage={lastMessageByMatch[item.matchId]}
-                onOpenChat={() => onOpenChat(item)}
-                onAction={(action) => handleMatchAction(item.matchId, action)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Daily Free Cap Reached -> Upgrade Link */}
       {getEffectivePlan(profile.plan, profile.plan_expires_at) === "free" &&
         todaysMatches.length >= 5 && (
@@ -483,9 +462,7 @@ export default function Matches({
               Daily limit reached (5/5 free matches)
             </p>
             <p className="text-sm text-ink/85">
-              {hasMore
-                ? "More compatible matches are available today."
-                : "Upgrading to Plus raises your daily cap to 7 matches, and Pro raises it to 10."}
+              Plus offers up to 7 daily matches, and Pro offers up to 10.
             </p>
           </div>
           <Link

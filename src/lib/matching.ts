@@ -184,7 +184,7 @@ export function computeCompatibilityScore(a: Profile, b: Profile): number {
   return Math.round(100 - (avgDiff / 4) * 100);
 }
 
-// Runs server-side via adminClient so clients cannot bypass the 3/day cap,
+// Runs server-side via adminClient so clients cannot bypass the daily cap,
 // Privacy Shield, blocks, or read other users' quiz answers and company domains.
 export async function getOrCreateTodaysMatchesForUser(
   me: Profile,
@@ -193,11 +193,10 @@ export async function getOrCreateTodaysMatchesForUser(
   todaysMatches: MatchWithProfile[];
   earlierMatches: MatchWithProfile[];
   hiddenByShieldCount: number;
-  hasMoreCandidates: boolean;
 }> {
   const today = getMatchDate();
 
-  const [{ data: existingMatches }, { data: blocks }, { data: allProfiles }] =
+  const [matchResult, blockResult, profileResult] =
     await Promise.all([
       adminClient
         .from("matches")
@@ -210,24 +209,23 @@ export async function getOrCreateTodaysMatchesForUser(
       adminClient.from("profiles").select("*"),
     ]);
 
+  const readError = matchResult.error ?? blockResult.error ?? profileResult.error;
+  if (readError) throw new Error(readError.message);
+  const { data: existingMatches } = matchResult;
+  const { data: blocks } = blockResult;
+  const { data: allProfiles } = profileResult;
+
   // Bidirectional block check: anyone I blocked OR who blocked me
   const blockedIds = new Set(
     (blocks ?? []).map((b) =>
       b.reporter_id === me.id ? b.reported_id : b.reporter_id
     )
   );
-  const existingPartnerIds = new Set(
-    (existingMatches ?? []).map((m) =>
-      m.user_a === me.id ? m.user_b : m.user_a
-    )
-  );
   const profileMap = new Map(
     (allProfiles ?? []).map((p) => [p.id, p as Profile])
   );
 
-  // Enforce the daily cap (3/day, or 4/day with Plus) by counting all rows created today
-  // (including passed/unmatched ones so neither can bypass the daily cap).
-  const activeExisting = (existingMatches ?? []).filter((m) => {
+  const isVisible = (m: NonNullable<typeof existingMatches>[number]) => {
     const partnerId = m.user_a === me.id ? m.user_b : m.user_a;
     if (blockedIds.has(partnerId)) return false;
 
@@ -248,15 +246,9 @@ export async function getOrCreateTodaysMatchesForUser(
     if (closedAt && closedBy === me.id) return false;
 
     return true;
-  });
-  const todaysCreatedCount = (existingMatches ?? []).filter(
-    (m) => m.match_date === today
-  ).length;
-  const todaysRows = activeExisting.filter((m) => m.match_date === today);
-  const earlierRows = activeExisting.filter((m) => m.match_date !== today);
+  };
 
   const dailyCap = getEntitlements(me.plan, me.plan_expires_at).dailyMatches;
-  const slotsNeeded = Math.max(0, dailyCap - todaysCreatedCount);
 
   // Filter eligible candidates & count Privacy Shield removals
   let hiddenByShieldCount = 0;
@@ -333,8 +325,6 @@ export async function getOrCreateTodaysMatchesForUser(
       continue;
     }
 
-    if (existingPartnerIds.has(candidate.id)) continue;
-
     // Relationship goal alignment: exclude diff >= 2, subtract 10 if diff === 1
     if (!me.relationship_goal || !candidate.relationship_goal) continue;
     const goalDiff = Math.abs(
@@ -349,42 +339,48 @@ export async function getOrCreateTodaysMatchesForUser(
     eligible.push({ candidate, score: finalScore });
   }
 
-  // Sort highest compatibility first and insert only up to today's remaining cap
-  eligible.sort((a, b) => b.score - a.score);
-  const toInsert = eligible.slice(0, slotsNeeded);
+  const { data: allocated, error: allocationError } = await adminClient.rpc(
+    "allocate_daily_picks",
+    {
+      p_viewer: me.id,
+      p_day: today,
+      p_cap: dailyCap,
+      p_candidates: eligible.map(({ candidate, score }) => ({
+        partner_id: candidate.id,
+        score,
+      })),
+    }
+  );
+  if (allocationError) throw new Error(allocationError.message);
 
-  if (toInsert.length > 0) {
-    const { data: inserted } = await adminClient
-      .from("matches")
-      .insert(
-        toInsert.map((item) => ({
-          user_a: me.id,
-          user_b: item.candidate.id,
-          compatibility_score: item.score,
-          match_date: today,
-        }))
-      )
-      .select("*");
-    if (inserted) todaysRows.push(...inserted);
-  }
-
-  const allDisplayedMatchIds = [...todaysRows, ...earlierRows].map((m) => m.id);
+  const todaysRows = ((allocated ?? []) as NonNullable<typeof existingMatches>).filter(isVisible);
+  const todayIds = new Set(todaysRows.map((match) => match.id));
+  const activeRows = (existingMatches ?? []).filter(isVisible);
+  const allDisplayedMatchIds = [...new Set([...todayIds, ...activeRows.map((match) => match.id)])];
   const messagesByMatch = new Map<
     string,
     { sender_id: string; content: string }[]
   >();
   if (allDisplayedMatchIds.length > 0) {
-    const { data: msgRows } = await adminClient
+    const { data: msgRows, error: messageError } = await adminClient
       .from("messages")
       .select("match_id, sender_id, content")
       .in("match_id", allDisplayedMatchIds);
 
+    if (messageError) throw new Error(messageError.message);
     for (const row of msgRows ?? []) {
       const list = messagesByMatch.get(row.match_id) ?? [];
       list.push({ sender_id: row.sender_id, content: row.content });
       messagesByMatch.set(row.match_id, list);
     }
   }
+
+  const earlierRows = activeRows.filter((match) =>
+    !todayIds.has(match.id) &&
+    (messagesByMatch.has(match.id) ||
+      ["like", "save"].includes(match.action_state?.[me.id]) ||
+      Boolean(match.closed_at ?? match.unmatched_at))
+  );
 
   const toMatchWithProfile = async (
     rows: typeof todaysRows
@@ -452,7 +448,7 @@ export async function getOrCreateTodaysMatchesForUser(
         return {
           matchId: m.id,
           compatibilityScore: m.compatibility_score,
-          matchDate: m.match_date,
+          matchDate: todayIds.has(m.id) ? today : m.match_date,
           partner: safePartner,
           ...(reasons ? { breakdown: reasons } : {}),
           reasons,
@@ -480,6 +476,5 @@ export async function getOrCreateTodaysMatchesForUser(
     todaysMatches,
     earlierMatches,
     hiddenByShieldCount,
-    hasMoreCandidates: eligible.length > slotsNeeded,
   };
 }

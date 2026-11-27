@@ -32,7 +32,7 @@ public/
   avatars/
     avatar-1.svg ... avatar-6.svg   # Illustration placeholder avatars
 scripts/
-  seed.ts                           # Seeds 10 Auth users, profiles, and 1 shared match via Admin API
+  seed.ts                           # Seeds 100 pool profiles and the featured evaluator accounts
 supabase/
   schema.sql                        # 4 PostgreSQL tables + constraints + cascades
   policies.sql                      # Row Level Security (RLS) rules for all 4 tables
@@ -181,7 +181,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, and `supabase/migrations_payments.sql` in **SQL Editor**.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, `supabase/migrations_payments.sql`, `supabase/migrations_review_fixes.sql`, and `supabase/migrations_daily_picks.sql` in **SQL Editor**, in that order.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:
@@ -199,10 +199,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    ```
    *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, or `CASHFREE_SECRET_KEY` in client code.)*
 
-4. **Seed the 16 demo users (requires Node 22+):**
+4. **Seed the featured accounts and demo pool (requires Node 22+):**
    ```bash
    node --experimental-strip-types --env-file=.env.local scripts/seed.ts
    ```
+
+   To refresh only the 50 male and 50 female pool profiles, leaving the featured evaluator accounts and starter chats alone, append `--pool-only`.
 
 5. **Run locally or build:**
    ```bash
