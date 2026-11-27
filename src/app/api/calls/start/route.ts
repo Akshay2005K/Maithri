@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUnblurStatus } from "@/lib/unblur";
+import { eitherAccountSuspended } from "@/lib/moderationServer";
 import { canStartCall, getRequiredPlanForCall } from "@/lib/entitlements";
 import {
   createLiveKitRoom,
@@ -92,6 +93,10 @@ export async function POST(request: Request) {
 
     const partnerId =
       matchRow.user_a === user.id ? matchRow.user_b : matchRow.user_a;
+
+    if (await eitherAccountSuspended(supabaseAdmin, [user.id, partnerId])) {
+      return NextResponse.json({ error: "Calling is unavailable for this match." }, { status: 403 });
+    }
 
     // Check bidirectional blocks
     const { data: blockRows } = await supabaseAdmin
@@ -246,6 +251,9 @@ export async function POST(request: Request) {
 
     if (insertErr || !callRow) {
       await deleteLiveKitRoom(roomName);
+      if (insertErr?.code === "42501") {
+        return NextResponse.json({ error: "Calling is unavailable for this match." }, { status: 403 });
+      }
       return NextResponse.json(
         { error: insertErr?.message || "Failed to save call." },
         { status: 500 }

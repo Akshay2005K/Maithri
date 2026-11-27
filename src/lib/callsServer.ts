@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { eitherAccountSuspended } from "@/lib/moderationServer";
 import {
   createLiveKitToken,
   deleteLiveKitRoom,
@@ -146,6 +147,9 @@ export async function handleCallRespondAction(
     }
 
     if (action === "accept") {
+      if (await eitherAccountSuspended(supabaseAdmin, [callRow.caller_id, callRow.callee_id])) {
+        return NextResponse.json({ error: "Calling is unavailable for this match." }, { status: 403 });
+      }
       if (callRow.callee_id !== user.id) {
         return NextResponse.json(
           { error: "Only the callee can accept a call." },

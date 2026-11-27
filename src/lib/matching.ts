@@ -196,7 +196,7 @@ export async function getOrCreateTodaysMatchesForUser(
 }> {
   const today = getMatchDate();
 
-  const [matchResult, blockResult, profileResult] =
+  const [matchResult, blockResult, profileResult, suspendedResult] =
     await Promise.all([
       adminClient
         .from("matches")
@@ -207,13 +207,15 @@ export async function getOrCreateTodaysMatchesForUser(
         .select("reporter_id, reported_id")
         .or(`reporter_id.eq.${me.id},reported_id.eq.${me.id}`),
       adminClient.from("profiles").select("*"),
+      adminClient.from("account_moderation").select("user_id").eq("suspended", true),
     ]);
 
-  const readError = matchResult.error ?? blockResult.error ?? profileResult.error;
+  const readError = matchResult.error ?? blockResult.error ?? profileResult.error ?? suspendedResult.error;
   if (readError) throw new Error(readError.message);
   const { data: existingMatches } = matchResult;
   const { data: blocks } = blockResult;
-  const { data: allProfiles } = profileResult;
+  const suspendedIds = new Set(suspendedResult.data?.map((row) => row.user_id));
+  const allProfiles = profileResult.data?.filter((profile) => !suspendedIds.has(profile.id));
 
   // Bidirectional block check: anyone I blocked OR who blocked me
   const blockedIds = new Set(

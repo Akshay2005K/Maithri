@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import WavePair from "@/components/WavePair";
 
@@ -45,7 +46,7 @@ function formatAuthError(rawMessage: string): string {
   return `${rawMessage} Check your email and password and try again.`;
 }
 
-export default function AuthForm() {
+export default function AuthForm({ founderSignIn = false }: { founderSignIn?: boolean }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,7 +74,7 @@ export default function AuthForm() {
 
     const trimmedEmail = email.trim();
 
-    if (isSignUp) {
+    if (!founderSignIn && isSignUp) {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
@@ -167,9 +168,11 @@ export default function AuthForm() {
   }
 
   return (
-    <section className="maithri-enter grid grid-cols-1 gap-10 py-4 md:grid-cols-12 md:items-start md:py-8">
+    <section className={founderSignIn
+      ? "maithri-enter w-full max-w-md"
+      : "maithri-enter grid grid-cols-1 gap-10 py-4 md:grid-cols-12 md:items-start md:py-8"}>
       {/* Left column: Hero headline, one-sentence explanation, static WavePair */}
-      <div className="space-y-6 md:col-span-7">
+      {!founderSignIn && <div className="space-y-6 md:col-span-7">
         <p className="inline-block rounded-full border border-marigold/60 bg-marigold/15 px-3.5 py-1 text-xs font-medium text-ink">
           Where Connections Become Meaningful.
         </p>
@@ -202,7 +205,7 @@ export default function AuthForm() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Right column: Sign in / Sign up / OTP verification + demo credentials */}
       <div className="space-y-5 md:col-span-5">
@@ -297,10 +300,10 @@ export default function AuthForm() {
           ) : (
             <>
               <h2 className="text-xl font-semibold text-dusk">
-                {isSignUp ? "Create an account" : "Sign in"}
+                {founderSignIn ? "Founder sign-in" : isSignUp ? "Create an account" : "Sign in"}
               </h2>
               <p className="mt-1 text-xs text-ink/75">
-                Where Connections Become Meaningful.
+                {founderSignIn ? "Use the Maithri account configured for moderation." : "Where Connections Become Meaningful."}
               </p>
 
               <form onSubmit={handleSubmit} className="mt-5 space-y-4">
@@ -370,7 +373,7 @@ export default function AuthForm() {
                 </button>
               </form>
 
-              <button
+              {!founderSignIn && <button
                 type="button"
                 onClick={() => {
                   setIsSignUp(!isSignUp);
@@ -382,13 +385,18 @@ export default function AuthForm() {
                 {isSignUp
                   ? "Already have an account? Sign in"
                   : "Need an account? Sign up"}
-              </button>
+              </button>}
+              {!founderSignIn && !isSignUp && (
+                <Link href="/admin" className="flex min-h-11 items-center justify-center text-sm text-dusk underline">
+                  Founder sign-in
+                </Link>
+              )}
             </>
           )}
         </div>
 
         {/* Collapsible Evaluator demo credentials drawer */}
-        {!isSignUp && !otpStep && (
+        {!founderSignIn && !isSignUp && !otpStep && (
           <details className="rounded-[20px] border border-dusk/15 bg-dusk/5 p-4 text-sm text-ink">
             <summary className="cursor-pointer font-semibold text-dusk focus-visible:outline-none">
               Evaluator demo accounts

@@ -233,3 +233,9 @@ Shared password for all seeded accounts: `elitmus2026`
 - **Libraries & services used:** Next.js, React, TypeScript, Tailwind CSS, `@supabase/supabase-js`, Supabase (Auth + PostgreSQL + Realtime), LiveKit Cloud (`livekit-server-sdk`, `livekit-client`, `@livekit/components-react`), Vercel.
 - **Third-party calling disclosure:** 1-on-1 voice and video calls are routed through **LiveKit Cloud (EU region)**. pHavelength does not record or store call audio/video content; only call metadata (`calls` table) is persisted.
 - **Design & layout disclosure:** The two-column onboarding and edit-profile layout (with an `"Optional"` divider, pill/row option pickers, and a centered primary action button) is inspired by common dating-app onboarding patterns. All copy, color tokens (`Dusk`, `Fog`, `Ink`, `Teal`, `Marigold`), typography (`Bricolage Grotesque` and `Literata`), and SVG illustrations are original to pHavelength.
+
+### Founder moderation
+
+Apply `supabase/migrations_moderation.sql` after the other migrations. Set the server-only `MAITHRI_FOUNDER_USER_ID` environment variable to your verified founder account UUID from Supabase Authentication. Restart the app, sign in with that account, and visit `/admin`.
+
+The existing Report and block flow submits items to the queue. Dismissing a report resolves the moderation review and leaves the reporter's block in effect. Warn, Suspend, and Restore access display the separate account notice in Maithri.

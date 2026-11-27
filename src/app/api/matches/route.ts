@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getOrCreateTodaysMatchesForUser } from "@/lib/matching";
 import type { Profile } from "@/lib/supabase";
+import { getModerationStatus } from "@/lib/moderationServer";
 
 // Server-only route for generating and fetching today's curated matches.
 // Enforces the 3/day cap, Privacy Shield, blocks, and returns only SafePartnerProfile fields.
@@ -37,6 +38,10 @@ export async function POST(request: Request) {
         { error: "Verify your email before viewing matches." },
         { status: 403 }
       );
+    }
+
+    if ((await getModerationStatus(supabaseAdmin, user.id))?.suspended) {
+      return NextResponse.json({ error: "Your account is suspended." }, { status: 403 });
     }
 
     const { data: myProfile, error: profileErr } = await supabaseAdmin

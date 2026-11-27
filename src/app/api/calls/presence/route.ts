@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { canRingCall, expireRingingCall, extractFirstName } from "@/lib/callsServer";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getModerationStatus } from "@/lib/moderationServer";
 
 const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
@@ -20,6 +21,9 @@ export async function POST(request: Request) {
     if (!user?.email_confirmed_at) {
       return NextResponse.json({ error: "Sign in with a verified email." }, { status: 401 });
     }
+
+    const suspended = (await getModerationStatus(admin, user.id))?.suspended;
+    if (suspended && leaving !== true) return NextResponse.json({ call: null });
 
     const { error } = await admin.rpc("refresh_call_presence", {
       p_user_id: user.id,
