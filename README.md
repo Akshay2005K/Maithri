@@ -239,3 +239,7 @@ Shared password for all seeded accounts: `elitmus2026`
 Apply `supabase/migrations_moderation.sql` after the other migrations. Set the server-only `MAITHRI_FOUNDER_USER_ID` environment variable to your verified founder account UUID from Supabase Authentication. Restart the app, sign in with that account, and visit `/admin`.
 
 The existing Report and block flow submits items to the queue. Dismissing a report resolves the moderation review and leaves the reporter's block in effect. Warn, Suspend, and Restore access display the separate account notice in Maithri.
+
+### Password reset
+
+In Supabase Authentication URL Configuration, add the full reset URL for each Maithri origin. For local development use `http://localhost:3000/reset-password`. For production use your live domain followed by `/reset-password`. The recovery email template must link to Supabase's confirmation URL so opening the link starts a recovery session.

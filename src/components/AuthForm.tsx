@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import WavePair from "@/components/WavePair";
+import PasswordInput from "@/components/PasswordInput";
 
 const DEMO_ACCOUNTS = [
   { label: "Demo 1 (Aarav)", email: "aarav@elitmus-demo.in" },
@@ -332,16 +333,20 @@ export default function AuthForm({ founderSignIn = false }: { founderSignIn?: bo
                   >
                     Password
                   </label>
-                  <input
+                  <PasswordInput
                     id="auth-password"
-                    type="password"
+                    autoComplete={isSignUp ? "new-password" : "current-password"}
                     required
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1.5 min-h-[44px] w-full rounded border border-dusk/30 bg-fog px-3 py-2 text-sm text-ink placeholder:text-ink/50"
                     placeholder="At least 6 characters"
                   />
+                  {!isSignUp && (
+                    <Link href="/reset-password" className="inline-flex min-h-11 items-center text-sm text-dusk underline">
+                      Forgot password?
+                    </Link>
+                  )}
                 </div>
 
                 {error && (
