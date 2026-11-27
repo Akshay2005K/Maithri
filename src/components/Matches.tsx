@@ -46,6 +46,7 @@ export default function Matches({
   const [filterMode, setFilterMode] = useState<"all" | "inbox" | "like" | "save">("all");
   const [hiddenCount, setHiddenCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [undoToast, setUndoToast] = useState<{
@@ -92,7 +93,6 @@ export default function Matches({
   useEffect(() => {
     let active = true;
     async function load() {
-      setLoading(true);
       setError(null);
       try {
         const {
@@ -160,7 +160,7 @@ export default function Matches({
     return () => {
       active = false;
     };
-  }, [profile]);
+  }, [profile, refreshVersion]);
 
   async function handleMatchAction(
     matchId: string,
@@ -219,6 +219,7 @@ export default function Matches({
         body.error ||
           "You have a conversation with this person now. Open the chat to unmatch."
       );
+      setRefreshVersion((version) => version + 1);
       return;
     }
 
@@ -235,6 +236,7 @@ export default function Matches({
         source: targetInToday ? "today" : "earlier",
       });
       startUndoTimer(6000);
+      setRefreshVersion((version) => version + 1);
       return;
     }
 
@@ -253,6 +255,7 @@ export default function Matches({
 
     setTodaysMatches((prev) => updateList(prev));
     setEarlierMatches((prev) => updateList(prev));
+    setRefreshVersion((version) => version + 1);
   }
 
   async function handleUndoPass() {
@@ -276,6 +279,7 @@ export default function Matches({
     });
 
     if (res.ok) {
+      setRefreshVersion((version) => version + 1);
       const restored: MatchWithProfile = { ...match, myAction: null };
       if (source === "today") {
         setTodaysMatches((prev) =>
@@ -306,8 +310,12 @@ export default function Matches({
   const savedCount = allMatchesCombined.filter((m) => m.myAction === "save").length;
 
   const inbox = allMatchesCombined.filter((match) => match.hasMessages || match.closedAt);
+  const dailyCap = getEntitlements(profile.plan, profile.plan_expires_at).dailyMatches;
+  const availablePicks = todaysMatches
+    .filter((match) => !match.myAction && !match.hasMessages && !match.closedAt)
+    .slice(0, dailyCap);
   const visibleMatches = filterMode === "all"
-    ? todaysMatches.filter((match) => !match.myAction && !match.hasMessages && !match.closedAt)
+    ? availablePicks
     : filterMode === "inbox"
       ? inbox
       : allMatchesCombined.filter((match) => match.myAction === filterMode);
@@ -455,14 +463,14 @@ export default function Matches({
 
       {/* Daily Free Cap Reached -> Upgrade Link */}
       {getEffectivePlan(profile.plan, profile.plan_expires_at) === "free" &&
-        todaysMatches.length >= 5 && (
+        filterMode === "all" && availablePicks.length === dailyCap && (
         <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-marigold bg-marigold/15 p-5 sm:flex-row sm:items-center">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-dusk">
-              Daily limit reached (5/5 free matches)
+              Want more picks in Today?
             </p>
             <p className="text-sm text-ink/85">
-              Plus offers up to 7 daily matches, and Pro offers up to 10.
+              Plus shows up to 7 picks at a time, and Pro shows up to 10.
             </p>
           </div>
           <Link

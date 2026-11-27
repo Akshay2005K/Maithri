@@ -36,8 +36,23 @@ begin
   -- Serialize allocations, including simultaneous requests from opposite sides
   -- of a pair. Match actions and conversations continue to use the shared row.
   perform pg_catalog.pg_advisory_xact_lock(547381, 1);
-  select p_cap - count(*) into remaining from public.daily_pick_history
-    where viewer_id = p_viewer and shown_on = p_day;
+  -- The plan cap applies to unreviewed picks currently visible in Today.
+  select p_cap - count(*) into remaining
+  from public.daily_pick_history h
+  join public.matches m on m.id = h.match_id
+  cross join lateral (
+    select case when m.user_a = p_viewer then m.user_b else m.user_a end as id
+  ) partner
+  where h.viewer_id = p_viewer and h.shown_on = p_day
+    and m.closed_at is null and m.unmatched_at is null
+    and (m.action_state ->> p_viewer::text) is null
+    and (m.action_state ->> partner.id::text) is distinct from 'pass'
+    and not exists (select 1 from public.messages msg where msg.match_id = m.id)
+    and not exists (
+      select 1 from public.reports_blocks b
+      where (b.reporter_id = p_viewer and b.reported_id = partner.id)
+         or (b.reporter_id = partner.id and b.reported_id = p_viewer)
+    );
 
   for candidate in
     select c.partner_id, c.score
