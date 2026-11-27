@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import AuthForm from "@/components/AuthForm";
 import { supabase } from "@/lib/supabase";
 
@@ -129,7 +128,7 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="text-sm underline">Back to Maithri</Link>
+        <h1 className="text-3xl font-semibold text-dusk">Moderation</h1>
         {viewer && (
           <button
             type="button"
@@ -151,7 +150,6 @@ export default function AdminPage() {
           </button>
         )}
       </div>
-      <h1 className="text-3xl font-semibold text-dusk">Moderation</h1>
       {error && <p role="alert" className="rounded-lg bg-marigold/20 p-4">{error}</p>}
       {feedback && <p role="status" className="rounded-lg bg-teal/15 p-4">{feedback}</p>}
       {viewer === undefined ? <p role="status">Checking access…</p> : !viewer ? (
