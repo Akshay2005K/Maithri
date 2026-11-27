@@ -7,7 +7,7 @@ An intentional dating web application built for the **eLitmus Software Developer
 ## 1. Product Thesis & Honest Prototype Framing
 
 ### Problems Targeted
-1. **Swipe fatigue & choice overload** → No swipe deck. Users receive up to **3 curated matches per day**, computed when opening the site.
+1. **Swipe fatigue & choice overload** → No swipe deck. Users receive up to **5, 7, or 10 curated daily picks** depending on their plan.
 2. **Low-effort `"hey"` openers & superficial photo judgment** → **4+ word minimum** per message and **progressive photo unblur** (`blur-xl` → `blur-md` → `blur-none`) unlocked only through mutual conversation.
 3. **Workplace & alumni awkwardness** → **Privacy Shield** that hides candidates sharing the same self-declared `company_domain` or `college_name` and displays `"N profiles hidden by your Privacy Shield"`.
 4. **Trust, privacy & safety concerns** → **18+ hard age gate**, **DPDP Act 2023 style explicit consent with stored timestamp**, **Report & Block**, **Delete My Account**, and plain-language **Privacy**, **Terms**, and **Grievance Contact** pages.
@@ -15,7 +15,7 @@ An intentional dating web application built for the **eLitmus Software Developer
 ### Simulated vs. Real (Honest Disclosures)
 - **Simulated eLitmus verification:** This prototype does **not** connect to eLitmus's private candidate database. Batch/verification badges are simulated and explicitly labeled `"Simulated eLitmus verification (prototype)"` in the UI, designed to plug into eLitmus data later. Company domains are self-declared.
 - **Sandbox-only payments:** The `/upgrade` page offers **Free** (₹0/month), **Plus** (₹199/month), and **Pro** (₹349/month) tiers powered by **Cashfree Sandbox** (`"Test mode: no real money is charged."`). Payment routes refuse to run unless `CASHFREE_ENV=sandbox` and `CASHFREE_APP_ID` starts with `TEST`.
-- **Illustration avatars only:** All profiles use local geometric/illustrated SVG avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`), with no photos of real people.
+- **Profile media:** Members can choose an illustrated avatar or upload a photo. Uploaded photos have separate blur variants, and match responses serve the variant for the conversation’s current reveal level. Voice intros are optional.
 
 ---
 
@@ -40,10 +40,13 @@ src/
   lib/
     supabase.ts                     # Browser Supabase client (anon key) + Profile type
     supabaseAdmin.ts                # Server-only Supabase client (service-role key)
-    matching.ts                     # Candidate filtering, Privacy Shield, scoring, 3/day cap
+    matching.ts                     # Candidate filtering, scoring, and daily picks
     unblur.ts                       # 4+ word message validation + blur levels 1–3
   components/
-    AuthForm.tsx                    # Email/password Sign In & Sign Up + demo credentials box
+    AuthForm.tsx                    # Member and founder sign-in, signup, and email verification
+    PasswordInput.tsx               # Password field with an accessible visibility toggle
+    IncomingCalls.tsx               # App-wide incoming calls and session presence
+    ModerationNotice.tsx            # Account notices for warnings, suspensions, and restorations
     Onboarding.tsx                  # Avatar picker, profile fields, Privacy Shield, 18+ gate, DPDP consent
     Quiz.tsx                        # 5-question compatibility quiz (1–5 scale)
     Matches.tsx                     # Daily curated matches, Privacy Shield counter, Upgrade link
@@ -53,9 +56,11 @@ src/
   app/
     layout.tsx                      # Root layout + persistent footer (Grievance, Privacy, Terms)
     page.tsx                        # Main state router (Auth -> Onboarding -> Quiz -> Matches <-> Chat + Delete Account)
-    upgrade/page.tsx                # Plans & mock upgrade page (Free / Plus / Pro)
+    admin/page.tsx                  # Founder moderation queue, decisions, and audit history
+    reset-password/page.tsx         # Request recovery email and set a new password
+    upgrade/page.tsx                # Free, Plus, and Pro plans with Cashfree Sandbox checkout
+    api/moderation/                 # Founder-only report decisions and account status
     api/delete-account/route.ts     # Server-only POST route verifying JWT and deleting auth.users row
-    api/plan/upgrade/route.ts       # Server-only POST route for mock upward plan upgrades
     privacy/page.tsx                # Privacy Policy page
     terms/page.tsx                  # Terms of Use page
     grievance/page.tsx              # Grievance & Safety Contact page
@@ -68,8 +73,10 @@ src/
 ### A. Authentication & Session Handling (`AuthForm.tsx`, `src/lib/supabase.ts`, `src/app/page.tsx`)
 - Uses **Supabase Auth** (`supabase.auth.signUp` and `supabase.auth.signInWithPassword`) — no custom password hashes are stored in application tables.
 - The browser client (`src/lib/supabase.ts`) uses `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Supabase Auth stores the user's JWT session in browser `localStorage` and sends it automatically on every Postgres request so `auth.uid()` works inside RLS policies.
-- `page.tsx` checks `supabase.auth.getSession()` on load and subscribes to `supabase.auth.onAuthStateChange(...)`, requiring `email_confirmed_at` before granting access.
+- The homepage observes Supabase Auth session changes and requires a verified email. After sign-in, a server-side check sends the configured founder to `/admin`. Members continue to onboarding or Matches. The admin dashboard has its own sign-in entry and **Sign out** button.
 - New signups verify their email with a 6–8 digit OTP code (`AuthForm.tsx`), while seeded demo accounts are pre-confirmed via `scripts/seed.ts` and shown with one-click fill buttons.
+
+- **Forgot password?** opens `/reset-password` from either sign-in form. The recovery email returns the user to Maithri to set and confirm a new password. Sign-in, signup, and reset password fields have show/hide controls.
 
 ### B. Onboarding, 18+ Gate, DPDP Consent & Privacy Shield Setup (`Onboarding.tsx`)
 When a newly signed-in user has no row in `profiles` (or clicks **Edit Profile / Shield**), `Onboarding.tsx` collects and upserts:
@@ -90,18 +97,11 @@ If `q1`–`q5` are `null` on `profiles` (or the user clicks **Retake Quiz**), `Q
 4. `q4` — **Conflict Resolution** (1 = Take quiet space before talking, 5 = Discuss directly right away)
 5. `q5` — **City & Future Flexibility** (1 = Stay settled in current city, 5 = Open to moving cities / abroad)
 
-### D. Matching Engine, Privacy Shield & Daily 3/Day Cap (`src/lib/matching.ts`, `Matches.tsx`)
-Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on open (no scheduled cron jobs needed):
-1. **Loads context:** Fetches `me`'s existing rows in `matches` (`user_a = me.id OR user_b = me.id`), `me`'s `reports_blocks` rows (`reporter_id = me.id`), and candidate rows from `profiles`.
-2. **Enforces daily cap:** Separates existing non-blocked matches into `todaysRows` (`match_date === today`) and `earlierRows` (`match_date !== today`). Computes `dailyCap = me.is_plus_mock ? 4 : 3` and `slotsNeeded = Math.max(0, dailyCap - todaysRows.length)`.
-3. **Filters candidates:**
-   - Excludes `me.id`, anyone in `blockedIds`, and anyone already in `existingPartnerIds`.
-   - Enforces mutual `looking_for` preference and same/nearby city (`NEARBY_CITIES` map, e.g., Bengaluru ↔ Hyderabad/Chennai; Pune ↔ Mumbai/Bengaluru; NCR ↔ Bengaluru/Pune).
-   - **Privacy Shield:** Compares `company_domain` (case-insensitive) and `college_name` (case-insensitive). If hidden by `me`'s own shield toggles, removes the candidate and increments `hiddenByShieldCount` (`"N profiles hidden by your Privacy Shield"`). If hidden by the *candidate's* shield toggle only, removes them silently without leaking their existence.
-4. **Compatibility Scoring:**
-   - Computes `avgDiff = (|a.q1 - b.q1| + ... + |a.q5 - b.q5|) / 5` (ranging `0` to `4`).
-   - Scales to 0–100: `Math.round(100 - (avgDiff / 4) * 100)`.
-5. **Inserts top matches:** Sorts eligible candidates descending by score, inserts up to `slotsNeeded` rows into `matches` for `today`, and renders **Today's Curated Matches** (and any **Previous Active Matches** below).
+### D. Matching Engine, Privacy Shield & Daily Picks
+
+`POST /api/matches` loads the account’s effective plan and allocates picks when the user opens or refreshes Matches. Daily picks reset at midnight in Asia/Kolkata. The active daily batch can refill after matches are passed, blocked, or closed, subject to eligible candidates. Earlier matches and conversations remain accessible when allowed by the match state.
+
+The server filters for mutual preferences, location, relationship goals, bidirectional blocks, suspended accounts, and Privacy Shield settings. The compatibility score is based on differences across the five quiz answers, with a penalty for a one-step relationship-goal difference. Match reasons are returned for Plus and Pro. Free users see a locked preview.
 
 ### E. Chat, 4+ Word Rule, Progressive Photo Unblur & Report/Block (`src/lib/unblur.ts`, `Chat.tsx`)
 1. **4+ Word Anti-Ghosting Rule:** `countWords(text)` splits on whitespace. Both `Chat.tsx` (on submit) and `unblur.ts` (when scoring messages) require **4 or more words** so one-word `"hi"` / `"hey"` messages are blocked and do not advance unblurring.
@@ -117,10 +117,12 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 6. **Voice & Video Calling (`CallPanel.tsx`, `src/lib/livekitServer.ts`, `/api/calls/*`):**
    - **Gating:** Voice calls unlock at **Level 2**; video calls unlock at **Level 3** (enforced on the server in `/api/calls/start`). Blocked, unmatched, or passed pairs cannot start or accept calls, and unmatching/blocking ends any active call and deletes its room.
    - **Room & Token Rules:** Rooms are created with random unguessable names, capped at 2 participants, with no recording/egress. Short-lived tokens (45 minutes) bind `identity` to the user's ID, `name` to first name only, and restrict voice calls to microphone-only publishing via `canPublishSources`.
+   - **Incoming calls:** Both members need an open Maithri session. The recipient can accept or decline from any signed-in screen. Closing the last tab ends a pending ring when the browser reports the close. A connection that disappears without a close signal expires after roughly 35 seconds, plus the next check.
+   - **Call history:** Chats show up to 100 recent finished call records alongside messages, including missed, declined, cancelled, and ended calls.
    - **Rate Limit:** Maximum **10 call starts per user per hour** and **1 active/ringing call per match**.
    - **Graceful Fallback:** If `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, or `NEXT_PUBLIC_LIVEKIT_URL` is missing, Call buttons are hidden cleanly without errors.
 
-### F. Plans & Mock Upgrades (`src/lib/entitlements.ts`, `src/lib/plans.ts`, `/upgrade`, `Matches.tsx`)
+### F. Plans & Sandbox Upgrades (`src/lib/entitlements.ts`, `src/lib/plans.ts`, `/upgrade`, `Matches.tsx`)
 - **Three Tiers (`profiles.plan`):**
   - **Free (₹0/month):** Curated daily matches (5/day) and text messaging (4+ words).
   - **Plus (₹199/month):** 7 curated daily matches/day, text messaging, **voice calls** (unlocked at unblur Level 2+), and **match reasons**.
@@ -134,38 +136,33 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
   - **Demo accounts:** Seeded Plus (`rohan@elitmus-demo.in`) and Pro (`vikram@elitmus-demo.in`) accounts have `plan_expires_at = null` so evaluators never lose access.
   - **Sandbox test data:** Visa `4706131211212123` (Expiry `03/2028`, CVV `123`, Name `Test`, OTP `111000`); UPI `testsuccess@gocash` (success) or `invalid@upi` (failure).
 
-### G. Delete My Account & Legal/Safety Pages (`api/delete-account/route.ts`, `privacy`, `terms`, `grievance`)
+### G. Profile Settings, Safety & Account Deletion
+
+Profile settings support editing personal details and preferences, updating photo and voice intro media, and retaking the quiz. Maithri also includes House Rules, a Safety page, and light, dark, and system theme settings. From an eligible chat, members can create a shareable meetup plan for a trusted contact.
+
+### H. Delete My Account & Legal/Safety Pages (`api/delete-account/route.ts`, `privacy`, `terms`, `grievance`)
 - **Delete My Account:** Clicking **Delete My Account** → **Yes, Delete Permanently** sends `POST /api/delete-account` with `Authorization: Bearer <access_token>`. The server route uses `getSupabaseAdmin()` (`SUPABASE_SERVICE_ROLE_KEY`) to verify the JWT via `supabaseAdmin.auth.getUser(token)` and calls `supabaseAdmin.auth.admin.deleteUser(user.id)`. Postgres `ON DELETE CASCADE` deletes the user's `profiles`, `matches`, `messages`, and `reports_blocks` rows.
 - **Legal & Grievance Pages:** Persistent footer in `layout.tsx` links to `/privacy`, `/terms`, and `/grievance` (displaying the prototype Grievance Officer contact `grievance@phavelength-prototype.example`), with no POSH claims and a clear disclaimer that this is a prototype requiring formal legal review before launch.
 
 ---
 
-## 4. Database Schema & Row Level Security (`supabase/schema.sql`, `supabase/policies.sql`)
+## 4. Database, Access Rules & Founder Moderation
 
-### Tables
-- `profiles` (`id` FK → `auth.users(id) on delete cascade`, `age >= 18`, `batch between 2020 and 2024`, `q1..q5 between 1 and 5`, `dpdp_consent_at`, `plan` `'free' | 'plus' | 'pro'`, Privacy Shield booleans)
-- `matches` (`id`, `user_a` FK, `user_b` FK, `compatibility_score`, `match_date default current_date`, `unique (user_a, user_b)`)
-- `messages` (`id`, `match_id` FK, `sender_id` FK, `content`, `created_at`)
-- `reports_blocks` (`id`, `reporter_id` FK, `reported_id` FK, `reason`, `created_at`)
-
-### RLS Policies (Enabled on All 4 Tables)
-- **`profiles`**: Any authenticated user can `SELECT`; only `auth.uid() = id` can `INSERT` or `UPDATE`.
-- **`matches`**: Only participants (`auth.uid() in (user_a, user_b)`) can `SELECT` or `INSERT`.
-- **`messages`**: Only participants of the parent match can `SELECT`; `INSERT` requires `sender_id = auth.uid()` AND being a participant of `match_id`.
-- **`reports_blocks`**: Only `auth.uid() = reporter_id` can `SELECT` or `INSERT`.
+- `schema.sql` and `policies.sql` create the base tables. The migrations add the current profile settings, daily picks, call records and presence, payments, and moderation.
+- Members can read their own profile. The matches API serves match-safe profile data. Message and call reads depend on match membership, blocks, and suspension. Message sends also require an open match.
+- **Report and block** creates a report in the founder’s queue. The dashboard groups reports into **Open**, **In review**, and **Resolved**. Decisions include **Dismiss**, **Warn**, **Suspend**, and **Restore access**, with a private reason, actor, and timestamp in the audit history. Warnings, suspensions, and restorations include a separate notice for the account holder.
+- Suspending an account restricts discovery, messaging, and calling. Dismissing a report leaves the reporter’s block in effect.
 
 ---
 
 ## 5. Known Prototype Limitations (Stated Honestly)
 
-1. **Optional `details` and profile column visibility:** Optional profile details (`profiles.details`, including interests, languages, open to, zodiac, education, communication style, love style, pets, drinking, smoking, and workout) are displayed as read-only chips to matched users and are visible to logged-in users under the `profiles` read policy.
-2. **Stored `age` column can go stale:** The database retains the integer `age` column (`check (age >= 18)`), which is computed from `birth_date` whenever a user saves their profile. While the UI dynamically derives displayed age from `birth_date`, the stored `age` integer in Postgres is not automatically incremented on a user's birthday until their profile is next saved.
-3. **Illustration avatars instead of photos (and CSS-only blur):** All profiles use local SVG illustration avatars (`/public/avatars/avatar-1.svg` through `avatar-6.svg`) instead of real user photo uploads. Photo blur (`blur-xl` / `blur-md` / `blur-none`) is applied visually in CSS while the SVG URL remains in the DOM; a production system with real photos would store pre-blurred assets and serve signed URLs on the server.
-4. **Self-declared workplace, college, and batch:** Company domains, college names, role titles, and eLitmus batches are self-declared; no live eLitmus candidate database API or corporate email verification is integrated.
-5. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are unguessable 128-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
-6. **Sandbox payments & production gaps:** Payments run in Cashfree Sandbox mode only (no real money is charged, no recurring billing, and no refunds or cancellations flow). Plan data lives in `profiles.plan` and `profiles.plan_expires_at` and is protected by `trg_enforce_profile_plan_guard`. A production launch would require Cashfree production activation, collecting a real customer phone number if Cashfree enforces it, GST handling, a refund policy, and formal legal review of the DPDP-inspired privacy/terms/grievance/safety pages.
-7. **Unified Pass & Unmatch limits:** Closure messages on Unmatch are a fixed set of four polite options (no free text), and a silent **Pass** on a zero-message match can still be noticed by the other person if they already viewed their list before refreshing.
-8. **Voice & Video Calling (LiveKit Cloud):**
+1. **Stored `age` column can go stale:** The database retains the integer `age` column (`check (age >= 18)`), which is computed from `birth_date` whenever a user saves their profile. While the UI dynamically derives displayed age from `birth_date`, the stored `age` integer in Postgres is not automatically incremented on a user's birthday until their profile is next saved.
+2. **Self-declared workplace, college, and batch:** Company domains, college names, role titles, and eLitmus batches are self-declared; no live eLitmus candidate database API or corporate email verification is integrated.
+3. **Shareable meetup plan links:** Meetup plan links (`/plan/[token]`) are random 160-bit tokens that expire 24 hours after the meetup time, but anyone who receives a forwarded link can view the four meetup summary fields until expiry or deletion.
+4. **Sandbox payments & production gaps:** Payments run in Cashfree Sandbox mode only (no real money is charged, no recurring billing, and no refunds or cancellations flow). Plan data lives in `profiles.plan` and `profiles.plan_expires_at` and is protected by `trg_enforce_profile_plan_guard`. A production launch would require Cashfree production activation, collecting a real customer phone number if Cashfree enforces it, GST handling, a refund policy, and formal legal review of the DPDP-inspired privacy/terms/grievance/safety pages.
+5. **Unified Pass & Unmatch limits:** Closure messages on Unmatch are a fixed set of four polite options (no free text), and a silent **Pass** on a zero-message match can still be noticed by the other person if they already viewed their list before refreshing.
+6. **Voice & Video Calling (LiveKit Cloud):**
    - Free-plan limits apply; see [LiveKit Pricing](https://livekit.io/pricing) for current quotas and limits.
    - Audio-only enforcement on voice calls depends on LiveKit token `canPublishSources` permissions (`TrackSource.MICROPHONE`).
    - Calls may fail on restrictive corporate/campus firewalls or symmetric NAT networks that block WebRTC UDP/ICE traffic.
@@ -181,7 +178,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
 
 2. **Set up Supabase:**
    - Create a project at [supabase.com](https://supabase.com).
-   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, `supabase/migrations_payments.sql`, `supabase/migrations_review_fixes.sql`, `supabase/migrations_daily_picks.sql`, and `supabase/migrations_call_presence.sql` in **SQL Editor**, in that order.
+   - Run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/migrations_features.sql`, `supabase/migrations_profile_settings.sql`, `supabase/migrations_improvements.sql`, `supabase/migrations_pass_unmatch.sql`, `supabase/migrations_calls.sql`, `supabase/migrations_calls_realtime.sql`, `supabase/migrations_plans.sql`, `supabase/migrations_payments.sql`, `supabase/migrations_review_fixes.sql`, `supabase/migrations_daily_picks.sql`, `supabase/migrations_call_presence.sql`, and `supabase/migrations_moderation.sql` in **SQL Editor**, in that order.
 
 3. **Configure environment variables:**
    Copy `.env.example` to `.env.local`:
@@ -196,6 +193,7 @@ Whenever the user lands on `Matches`, `getOrCreateTodaysMatches(me)` runs on ope
    CASHFREE_SECRET_KEY=your-sandbox-secret-key-server-only
    CASHFREE_ENV=sandbox
    NEXT_PUBLIC_CASHFREE_MODE=sandbox
+   MAITHRI_FOUNDER_USER_ID=your-verified-founder-auth-user-uuid
    ```
    *(`.env.local` is gitignored. Never expose `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, or `CASHFREE_SECRET_KEY` in client code.)*
 
@@ -231,15 +229,21 @@ Shared password for all seeded accounts: `elitmus2026`
 ## 8. Disclosures
 
 - **Libraries & services used:** Next.js, React, TypeScript, Tailwind CSS, `@supabase/supabase-js`, Supabase (Auth + PostgreSQL + Realtime), LiveKit Cloud (`livekit-server-sdk`, `livekit-client`, `@livekit/components-react`), Vercel.
-- **Third-party calling disclosure:** 1-on-1 voice and video calls are routed through **LiveKit Cloud (EU region)**. pHavelength does not record or store call audio/video content; only call metadata (`calls` table) is persisted.
-- **Design & layout disclosure:** The two-column onboarding and edit-profile layout (with an `"Optional"` divider, pill/row option pickers, and a centered primary action button) is inspired by common dating-app onboarding patterns. All copy, color tokens (`Dusk`, `Fog`, `Ink`, `Teal`, `Marigold`), typography (`Bricolage Grotesque` and `Literata`), and SVG illustrations are original to pHavelength.
+- **Third-party calling disclosure:** 1-on-1 voice and video calls are routed through **LiveKit Cloud (EU region)**. Maithri does not record or store call audio/video content; only call metadata (`calls` table) is persisted.
+- **Design & layout disclosure:** The two-column onboarding and edit-profile layout (with an `"Optional"` divider, pill/row option pickers, and a centered primary action button) is inspired by common dating-app onboarding patterns. All copy, color tokens (`Dusk`, `Fog`, `Ink`, `Teal`, `Marigold`), typography (`Bricolage Grotesque` and `Literata`), and SVG illustrations are original to Maithri.
+
+## 9. Deployment & Verification
 
 ### Founder moderation
 
-Apply `supabase/migrations_moderation.sql` after the other migrations. Set the server-only `MAITHRI_FOUNDER_USER_ID` environment variable to your verified founder account UUID from Supabase Authentication. Restart the app, sign in with that account, and visit `/admin`.
+Apply `supabase/migrations_moderation.sql` after the other migrations. Set the server-only `MAITHRI_FOUNDER_USER_ID` environment variable to your verified founder account UUID from Supabase Authentication. Use `.env.local` for local development or set the variable in the Vercel project’s **Production** environment and redeploy. Sign in with the verified founder account to open `/admin` automatically.
 
-The existing Report and block flow submits items to the queue. Dismissing a report resolves the moderation review and leaves the reporter's block in effect. Warn, Suspend, and Restore access display the separate account notice in Maithri.
+To verify moderation, submit a report between test accounts, review it as founder, and confirm the decision appears in the audit history and any account notice appears for the reported test account.
 
 ### Password reset
 
-In Supabase Authentication URL Configuration, add the full reset URL for each Maithri origin. For local development use `http://localhost:3000/reset-password`. For production use your live domain followed by `/reset-password`. The recovery email template must link to Supabase's confirmation URL so opening the link starts a recovery session.
+In Supabase Authentication URL Configuration, add the full reset URL for each Maithri origin. For local development use `http://localhost:3000/reset-password`. For production use `https://maithri-app.vercel.app/reset-password` or the equivalent path on your production domain. The recovery email template must link to Supabase's confirmation URL so opening the link starts a recovery session.
+
+### Local checks
+
+Run `npm test` for matching and photo reveal tests, and `npx tsc --noEmit` for type checking. The current project does not install ESLint, so `npm run lint` requires additional setup.
